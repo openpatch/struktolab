@@ -1,5 +1,11 @@
 # struktolab
 
+## 0.3.0
+
+### Minor Changes
+
+- 61a5162: Renderer can now also use color-mode
+
 ## 0.2.0
 
 ### Minor Changes
