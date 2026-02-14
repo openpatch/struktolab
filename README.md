@@ -62,6 +62,7 @@ Full-featured visual editor with toolbar, pseudocode sync, and import/export.
 | `font-size` | Font size in pixels                | `14`    |
 | `lang`      | Pseudocode language (`de` or `en`) | `de`    |
 | `src`       | URL to a JSON tree file            | —       |
+| `color-mode` | Color mode (`color`, `bw`)       | `color` |
 
 #### JavaScript API
 
