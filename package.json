@@ -1,56 +1,66 @@
 {
-  "name": "struktog.",
-  "version": "1.3.1",
-  "description": "Webprogramm zur Erstellung von Struktogrammen sowie zur Umwandlung dessen in Code (Python, PHP, Javascript)",
+  "name": "struktolab",
+  "version": "0.0.0",
+  "description": "A web-based structogram (Nassi-Shneiderman diagram) editor and renderer with code generation",
+  "type": "module",
+  "main": "dist/editor/struktolab-editor.umd.js",
+  "module": "dist/editor/struktolab-editor.es.js",
+  "exports": {
+    ".": {
+      "import": "./dist/editor/struktolab-editor.es.js",
+      "require": "./dist/editor/struktolab-editor.umd.js"
+    },
+    "./renderer": {
+      "import": "./dist/renderer/struktolab-renderer.es.js",
+      "require": "./dist/renderer/struktolab-renderer.umd.js"
+    },
+    "./editor": {
+      "import": "./dist/editor/struktolab-editor.es.js",
+      "require": "./dist/editor/struktolab-editor.umd.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "license.md"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "watch": "webpack serve",
-    "build": "webpack --mode production",
-    "chromium": "webpack serve --open chromium"
+    "dev": "vite",
+    "build": "vite build",
+    "build:renderer": "BUILD_TARGET=renderer vite build",
+    "build:editor": "BUILD_TARGET=editor vite build",
+    "build:lib": "BUILD_TARGET=renderer vite build && BUILD_TARGET=editor vite build",
+    "build:all": "vite build && BUILD_TARGET=renderer vite build && BUILD_TARGET=editor vite build",
+    "preview": "vite preview",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build:lib && changeset publish"
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:openpatch/struktog.git"
+    "url": "git+https://github.com/openpatch/struktolab.git"
   },
-  "keywords": [],
-  "author": "Didaktik der Informatik TU Dresden",
+  "homepage": "https://struktolab.openpatch.org",
+  "bugs": {
+    "url": "https://github.com/openpatch/struktolab/issues"
+  },
+  "keywords": [
+    "structogram",
+    "nassi-shneiderman",
+    "diagram",
+    "editor",
+    "web-component"
+  ],
+  "author": "OpenPatch",
   "contributors": [
-    "Klaus Ramm",
-    "Thiemo Leonhardt",
     "Mike Barkmin"
   ],
   "license": "MIT",
   "devDependencies": {
-    "@babel/core": "^7.21.4",
-    "babel-core": "^6.26.3",
-    "babel-loader": "^8.2.2",
-    "babel-preset-env": "^1.7.0",
-    "clean-webpack-plugin": "^4.0.0",
-    "copy-webpack-plugin": "^9.0.1",
-    "css-loader": "^5.2.4",
-    "eslint": "^7.25.0",
-    "eslint-config-standard": "^16.0.2",
-    "eslint-plugin-import": "^2.27.5",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^5.1.0",
-    "html-webpack-plugin": "^5.5.0",
-    "jointjs": "^3.6.5",
-    "mini-css-extract-plugin": "^1.5.1",
-    "sass": "^1.32.12",
-    "sass-loader": "^11.0.1",
-    "style-loader": "^2.0.0",
-    "svg-url-loader": "^7.1.1",
-    "webpack": "^5.36.1",
-    "webpack-cli": "^4.6.0",
-    "webpack-dev-server": "^3.11.2",
-    "webpack-shell-plugin-next": "^2.2.2",
-    "yarn": "^1.22.17",
-    "jspdf": "^2.5.1"
+    "@changesets/cli": "^2.29.8",
+    "vite": "^7.3.1"
   },
   "dependencies": {
-    "html-to-image": "^1.11.11",
-    "js-base64": "^3.7.5",
-    "jspdf": "^2.5.1",
     "pako": "^2.1.0"
   }
 }

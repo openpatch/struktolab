@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Struktog Editor Demo</title>
+  <style>
+    body { font-family: sans-serif; max-width: 900px; margin: 2em auto; padding: 0 1em; }
+    h1 { color: #333; }
+    .example { margin: 2em 0; }
+    h2 { color: #555; margin-bottom: 0.5em; }
+    pre { background: #f5f5f5; padding: 1em; border-radius: 4px; overflow-x: auto; font-size: 13px; }
+    .hint { color: #888; font-size: 13px; margin-top: 0.5em; }
+  </style>
+  <script src="struktolab-editor.js"></script>
+</head>
+<body>
+  <h1>Struktog Editor – Demo</h1>
+
+  <div class="example">
+    <h2>Empty Editor</h2>
+    <p class="hint">Click a toolbar button, then click a "+" target to insert a node. Double-click a node to edit its text.</p>
+    <struktolab-editor id="empty-editor" font-size="14"></struktolab-editor>
+  </div>
+
+  <div class="example">
+    <h2>Editor with German Pseudocode</h2>
+    <struktolab-editor font-size="14">
+      <script type="text/pseudocode">
+eingabe("Zahl n")
+ergebnis = 1
+wiederhole für i = 1 bis n:
+    ergebnis = ergebnis * i
+falls ergebnis > 100:
+    ausgabe("großes Ergebnis")
+sonst:
+    ausgabe("kleines Ergebnis")
+      </script>
+    </struktolab-editor>
+  </div>
+
+  <div class="example">
+    <h2>Editor with English Pseudocode</h2>
+    <struktolab-editor font-size="14" lang="en">
+      <script type="text/pseudocode">
+function factorial(n):
+    if n <= 1:
+        result = 1
+    else:
+        result = n * factorial(n - 1)
+switch color:
+    case "red":
+        output("stop")
+    case "green":
+        output("go")
+    else:
+        output("unknown")
+      </script>
+    </struktolab-editor>
+  </div>
+
+  <div class="example">
+    <h2>Code Export</h2>
+    <struktolab-editor id="export-editor" font-size="14" lang="en">
+      <script type="text/pseudocode">
+input("number n")
+result = 1
+repeat for i = 1 to n:
+    result = result * i
+output("result")
+      </script>
+    </struktolab-editor>
+    <h3>Generated Python</h3>
+    <pre id="code-py"></pre>
+    <h3>Generated JavaScript</h3>
+    <pre id="code-js"></pre>
+    <script>
+      var exportEditor = document.getElementById('export-editor');
+      function updateCodeExport() {
+        document.getElementById('code-py').textContent = exportEditor.toCode('python');
+        document.getElementById('code-js').textContent = exportEditor.toCode('javascript');
+      }
+      exportEditor.addEventListener('change', updateCodeExport);
+      // Initial render after component initializes
+      requestAnimationFrame(function() {
+        requestAnimationFrame(updateCodeExport);
+      });
+    </script>
+  </div>
+
+  <div class="example">
+    <h2>Programmatic API</h2>
+    <p class="hint">Use the buttons below to test <code>saveJSON()</code>, <code>loadJSON()</code>, <code>exportImage()</code>, and <code>change()</code>.</p>
+    <struktolab-editor id="api-editor" font-size="14" lang="en">
+      <script type="text/pseudocode">
+input("name")
+output("Hello " + name)
+      </script>
+    </struktolab-editor>
+    <div style="margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap;">
+      <button onclick="showJSON()">saveJSON()</button>
+      <button onclick="testLoadJSON()">loadJSON()</button>
+      <button onclick="testChange()">change()</button>
+    </div>
+    <pre id="api-output" style="white-space: pre-wrap; max-height: 300px; overflow: auto;"></pre>
+    <script>
+      var apiEditor = document.getElementById('api-editor');
+      var apiOut = document.getElementById('api-output');
+
+      function showJSON() {
+        apiOut.textContent = apiEditor.saveJSON();
+      }
+
+      function testLoadJSON() {
+        apiEditor.loadJSON({
+          type: "TaskNode",
+          text: "Loaded from JSON!",
+          followElement: { type: "OutputNode", text: "done" }
+        });
+        apiOut.textContent = "loadJSON() called – tree replaced.";
+      }
+
+      function testChange() {
+        apiEditor.change({
+          type: "BranchNode",
+          text: "x > 0",
+          trueChild: { type: "TaskNode", text: "positive" },
+          falseChild: { type: "TaskNode", text: "non-positive" }
+        });
+        apiOut.textContent = "change() called – tree replaced.";
+      }
+    </script>
+  </div>
+</body>
+</html>

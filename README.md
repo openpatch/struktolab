@@ -1,138 +1,191 @@
-# Struktog.
+# StruktoLab
 
-Ein freier, webbasierter Struktogrammeditor zur Erstellung von Nassi-Shneiderman-Diagrammen mit automatischer Code-Generierung.
-
-Dieses Projekt ist ein Fork des ursprünglichen Struktogrammeditors der TU Dresden. Es wird aktiv weiterentwickelt und um neue Features erweitert.
+A free, web-based structogram (Nassi-Shneiderman diagram) editor with automatic code generation. Built entirely with web components — no framework dependencies.
 
 ## Features
 
-- 🎨 Intuitive grafische Oberfläche zur Erstellung von Struktogrammen
-- 🔄 Code-Generierung für Python, Python ab v3.10, PHP, Java, C#, C++ und C
-- 💾 Export als PNG-Bild oder PDF
-- 🔗 Teilen von Diagrammen über URL (Zustand wird in URL-Parametern gespeichert)
-- 📦 Kann lokal ohne Server genutzt werden
-- 🎯 Konfigurierbare Element-Auswahl für verschiedene Einsatzszenarien
+- 📝 Bidirectional pseudocode editing (visual ↔ text)
+- 🌍 German and English pseudocode support
+- 💻 Code generation for Python, Java, and JavaScript
+- 💾 Save/Load as JSON
+- 🖼 Export as PNG or SVG image
+- 🔗 Shareable URLs (state compressed in URL hash, compatible with [struktolab.openpatch.org](https://struktolab.openpatch.org))
+- 📦 Web components — embed anywhere with zero dependencies
 
-## Verwendung
+## Web Components
 
-### Online-Nutzung
-Das Tool kann direkt im Browser verwendet werden, ohne Installation.
+### `<struktolab-editor>`
 
-### Lokale Nutzung
-1. Lade die neueste Version herunter (siehe [Download](#download))
-2. Entpacke die ZIP-Datei
-3. Öffne die `index.html` Datei in einem modernen Webbrowser
+Full-featured visual editor with toolbar, pseudocode sync, and import/export.
 
-## Konfiguration
+```html
+<script src="struktolab-editor.js"></script>
 
-Der Editor kann über URL-Parameter angepasst werden, um verschiedene Elemente ein- oder auszublenden.
+<!-- Empty editor -->
+<struktolab-editor font-size="14"></struktolab-editor>
 
-### Verfügbare Elemente
-* **Grundelemente:** Anweisung, Eingabe, Ausgabe
-* **Schleifen:** Zählergesteuerte Schleife, Kopfgesteuerte Schleife, Fußgesteuerte Schleife
-* **Verzweigungen:** Verzweigung, Fallunterscheidung
-* **Weitere:** Try-Catch-Block, Funktionsblock
+<!-- With German pseudocode -->
+<struktolab-editor font-size="14">
+  <script type="text/pseudocode">
+    eingabe("Zahl n")
+    ergebnis = 1
+    wiederhole für i = 1 bis n:
+        ergebnis = ergebnis * i
+    ausgabe(ergebnis)
+  </script>
+</struktolab-editor>
 
-### Vordefinierte Konfigurationen
+<!-- With English pseudocode -->
+<struktolab-editor font-size="14" lang="en">
+  <script type="text/pseudocode">
+    input("number n")
+    result = 1
+    repeat for i = 1 to n:
+        result = result * i
+    output(result)
+  </script>
+</struktolab-editor>
 
-Als Standard werden alle Elemente geladen. Über URL-Parameter können spezifische Konfigurationen aktiviert werden:
-
-**Für Python:**
+<!-- From JSON -->
+<struktolab-editor font-size="14">
+  <script type="application/json">
+    { "type": "TaskNode", "text": "x = 42" }
+  </script>
+</struktolab-editor>
 ```
-index.html?config=python
+
+#### Attributes
+
+| Attribute   | Description                        | Default |
+|-------------|------------------------------------|---------|
+| `width`     | Fixed width in pixels              | auto    |
+| `font-size` | Font size in pixels                | `14`    |
+| `lang`      | Pseudocode language (`de` or `en`) | `de`    |
+| `src`       | URL to a JSON tree file            | —       |
+
+#### JavaScript API
+
+```js
+const editor = document.querySelector('struktolab-editor');
+
+// Get/set tree
+editor.tree = { type: "TaskNode", text: "hello" };
+console.log(editor.tree);
+
+// Pseudocode
+editor.pseudocode = 'eingabe("Zahl n")';
+
+// Code generation
+editor.toCode('python');    // → Python code
+editor.toCode('java');      // → Java code
+editor.toCode('javascript'); // → JavaScript code
+
+// Save/Load JSON (clean, no internal IDs)
+const json = editor.saveJSON();
+editor.loadJSON(json);
+
+// Export image
+const pngBlob = await editor.exportImage('png');
+const svgBlob = await editor.exportImage('svg');
+
+// Programmatic update
+editor.change({ type: "TaskNode", text: "updated" });
+
+// Listen for changes
+editor.addEventListener('change', (e) => {
+  console.log('Tree changed:', e.detail.tree);
+});
 ```
 
-**Für Python mit Funktionsblöcken:**
+### `<struktolab-renderer>`
+
+Read-only SVG renderer for displaying structograms.
+
+```html
+<script src="struktolab-renderer.js"></script>
+
+<struktolab-renderer font-size="14">
+  <script type="text/pseudocode">
+    falls x > 0:
+        ausgabe("positiv")
+    sonst:
+        ausgabe("nicht positiv")
+  </script>
+</struktolab-renderer>
 ```
-index.html?config=python_func
+
+Same attributes and tree format as the editor.
+
+## Shareable URLs
+
+StruktoLab supports shareable URLs with the structogram state compressed in the URL hash using pako (zlib). This is compatible with existing URLs from [struktolab.openpatch.org](https://struktolab.openpatch.org).
+
+Example:
+```
+https://example.com/#pako:eNqlkstuE0EQRf-l166kH9Ov2UaJ...
 ```
 
-### Unterstützte Programmiersprachen
+The state is updated automatically as you edit.
 
-Der Code-Generator unterstützt folgende Sprachen:
-- Python (< v3.10)
-- Python ab v3.10 (mit match-case)
-- PHP
-- Java
-- C#
-- C++
-- C (eingeschränkt: Try-Catch wird nicht unterstützt)
+## Development
 
-## Download
+### Prerequisites
 
-Die aktuellste Version kann von GitHub heruntergeladen werden:
+- Node.js (v14+)
+- npm
 
-- [Latest Release](https://github.com/openpatch/struktog/releases/latest)
-
-Nach dem Herunterladen und Entpacken kann die `index.html` direkt im Browser geöffnet werden.
-
-## Mitwirkende
-
-Ursprüngliche Entwicklung:
-- Klaus Ramm
-- Thiemo Leonhardt  
-- Tom-Maurice Schreiber
-
-Weiterentwicklung und Wartung:
-- Mike Barkmin ([@mikebarkmin](https://github.com/mikebarkmin))
-
-Beiträge sind herzlich willkommen! Siehe [Entwicklung](#entwicklung) für weitere Informationen.
-
-## Lizenz
-
-Dieses Projekt ist unter der MIT-Lizenz lizenziert. Siehe [license.md](license.md) für Details.
-
-## Entwicklung
-
-Die Entwicklung basiert auf Node.js und webpack. Das Projekt verwendet npm zur Verwaltung der Abhängigkeiten.
-
-### Voraussetzungen
-- Node.js (v14 oder höher empfohlen)
-- npm (wird mit Node.js mitgeliefert)
-- Git
-
-### Installation
-
-Klone das Repository und installiere die Abhängigkeiten:
+### Setup
 
 ```bash
-git clone https://github.com/openpatch/struktog.git
+git clone https://github.com/openpatch/struktolab.git
 cd struktog
 npm install
 ```
 
-### Development Server
-
-Startet einen lokalen Entwicklungsserver mit Hot-Reloading:
+### Dev Server
 
 ```bash
-npm run watch
+npm run dev
 ```
-
-Der Server läuft standardmäßig auf `http://localhost:8081`
 
 ### Production Build
 
-Erstellt einen optimierten Build im Ordner `./build`:
-
 ```bash
+# App (index.html + bundled editor)
 npm run build
+
+# Component libraries (UMD + ES modules)
+npm run build:renderer
+npm run build:editor
+
+# All at once
+npm run build:all
 ```
 
-### Projektstruktur
+Outputs:
+- `build/` — app with `index.html`
+- `dist/renderer/` — `struktolab-renderer.umd.js` / `.es.js`
+- `dist/editor/` — `struktolab-editor.umd.js` / `.es.js`
 
-- `src/` - Quellcode
-  - `views/` - UI-Komponenten
-  - `model/` - Datenmodelle
-  - `presenter/` - Präsentationslogik
-  - `helpers/` - Hilfsfunktionen
-- `build/` - Kompilierte Dateien (wird generiert)
-- `webpack.config.js` - Webpack-Konfiguration
+## Supported Node Types
 
-## Changelog
+| Node | Description |
+|------|-------------|
+| Task | Simple statement |
+| Input | Read input |
+| Output | Write output |
+| If/Else | Two-way branch |
+| Switch/Case | Multi-way branch |
+| While | Head-controlled loop |
+| Do-While | Foot-controlled loop |
+| For | Counter-controlled loop |
+| Function | Function definition |
+| Try/Catch | Exception handling |
 
-Siehe [CHANGELOG.md](CHANGELOG.md) für eine detaillierte Liste der Änderungen.
+## License
+
+MIT — see [license.md](license.md)
 
 ## Credits
 
-Dieses Projekt basiert auf dem ursprünglichen Struktogrammeditor der Didaktik der Informatik der TU Dresden.
+Based on the original [structogram editor](https://gitlab.com/dev-ddi/cs-school-tools/struktog) by Didaktik der Informatik, TU Dresden.

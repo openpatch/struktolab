@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StruktoLab — Structogram Editor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f5;
+      color: #242428;
+    }
+    header {
+      background: #004c45;
+      color: #fff;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 {
+      font-size: 20px;
+      margin: 0;
+      font-weight: 600;
+    }
+    header h1 span { color: #b5e3d9; }
+    header .spacer { flex: 1; }
+    header button {
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 6px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    header button:hover { background: rgba(255,255,255,0.2); }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    struktolab-editor {
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .code-section {
+      margin-top: 16px;
+      background: #fff;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+    .code-tabs {
+      display: flex;
+      border-bottom: 1px solid #d6d6d6;
+      background: #f5f5f5;
+    }
+    .code-tabs button {
+      padding: 8px 18px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      color: #3c3c3c;
+      border-bottom: 2px solid transparent;
+    }
+    .code-tabs button:hover { color: #004c45; }
+    .code-tabs button.active {
+      color: #004c45;
+      border-bottom-color: #017460;
+      font-weight: 600;
+    }
+    .code-output {
+      padding: 16px;
+      font-family: "Fira Code", "Consolas", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      min-height: 60px;
+    }
+    footer {
+      text-align: center;
+      padding: 20px 16px;
+      color: #a4a4a4;
+      font-size: 13px;
+    }
+    footer a {
+      color: #017460;
+      text-decoration: none;
+    }
+    footer a:hover { text-decoration: underline; }
+    footer .sep { margin: 0 6px; color: #d6d6d6; }
+  </style>
+  <script type="module" src="/src/app/main.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Strukto<span>Lab</span></h1>
+    <div class="spacer"></div>
+    <button id="share-btn" title="Copy shareable URL to clipboard">🔗 Share</button>
+  </header>
+
+  <div class="container">
+    <struktolab-editor id="editor" font-size="14" lang="en">
+      <script type="text/pseudocode">
+function factorial(n):
+    if n <= 1 [0.3, 0.7]:
+        result = 1
+    else:
+        result = n * factorial(n - 1)
+      </script>
+    </struktolab-editor>
+
+    <div class="code-section">
+      <div class="code-tabs">
+        <button class="active" data-lang="python">Python</button>
+        <button data-lang="java">Java</button>
+        <button data-lang="javascript">JavaScript</button>
+      </div>
+      <pre class="code-output" id="code-output"></pre>
+    </div>
+
+    <footer>
+      Built with ❤️ by <a href="https://openpatch.org" target="_blank">OpenPatch</a>
+      <br>
+      <a href="documentation.html">Documentation</a>
+      <span class="sep">•</span>
+      <a href="https://github.com/openpatch/struktolab" target="_blank">GitHub</a>
+    </footer>
+  </div>
+</body>
+</html>

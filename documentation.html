@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StruktoLab — Documentation</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f5;
+      color: #242428;
+      line-height: 1.6;
+    }
+    header {
+      background: #004c45;
+      color: #fff;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 20px; margin: 0; font-weight: 600; }
+    header h1 span { color: #b5e3d9; }
+    header h1 a { color: inherit; text-decoration: none; }
+    header .spacer { flex: 1; }
+    header a.back {
+      color: #b5e3d9;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    header a.back:hover { color: #fff; }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 24px 16px 40px;
+    }
+
+    h2 {
+      color: #004c45;
+      border-bottom: 2px solid #017460;
+      padding-bottom: 6px;
+      margin-top: 40px;
+    }
+    h3 {
+      color: #3c3c3c;
+      margin-top: 28px;
+    }
+
+    code {
+      background: #b5e3d9;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.9em;
+      font-family: "Fira Code", "Consolas", monospace;
+    }
+    pre {
+      background: #242428;
+      color: #d6d6d6;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-family: "Fira Code", "Consolas", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+    }
+    .keyword { color: #b5e3d9; }
+    .string { color: #a6e3a1; }
+    .comment { color: #a4a4a4; font-style: italic; }
+    .tag { color: #b5e3d9; }
+    .attr { color: #f9e2af; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+    }
+    th, td {
+      border: 1px solid #d6d6d6;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    th { background: #f5f5f5; font-weight: 600; color: #004c45; }
+    tr:nth-child(even) { background: #f5f5f5; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin: 16px 0;
+    }
+    .two-col > div > h4 { margin-top: 0; color: #3c3c3c; }
+
+    @media (max-width: 640px) {
+      .two-col { grid-template-columns: 1fr; }
+    }
+
+    .note {
+      background: rgba(181, 227, 217, 0.3);
+      border-left: 4px solid #017460;
+      padding: 12px 16px;
+      border-radius: 0 4px 4px 0;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 20px 16px;
+      color: #a4a4a4;
+      font-size: 13px;
+    }
+    footer a { color: #017460; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+    footer .sep { margin: 0 6px; color: #d6d6d6; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><a href="index.html">Strukto<span>Lab</span></a></h1>
+    <div class="spacer"></div>
+    <a class="back" href="index.html">← Back to Editor</a>
+  </header>
+
+  <div class="container">
+    <h2>Pseudocode Reference</h2>
+
+    <p>StruktoLab uses a simple pseudocode syntax to define structograms. Two languages are supported: <strong>German</strong> (default) and <strong>English</strong>. Indentation (4 spaces) defines nesting.</p>
+
+    <h3>Statements</h3>
+
+    <div class="two-col">
+      <div>
+        <h4>🇩🇪 German</h4>
+<pre><code><span class="comment">// Task (any plain statement)</span>
+ergebnis = 1
+
+<span class="comment">// Input</span>
+<span class="keyword">eingabe</span>(<span class="string">"Zahl n"</span>)
+
+<span class="comment">// Output</span>
+<span class="keyword">ausgabe</span>(<span class="string">"Ergebnis"</span>)</code></pre>
+      </div>
+      <div>
+        <h4>🇬🇧 English</h4>
+<pre><code><span class="comment">// Task (any plain statement)</span>
+result = 1
+
+<span class="comment">// Input</span>
+<span class="keyword">input</span>(<span class="string">"number n"</span>)
+
+<span class="comment">// Output</span>
+<span class="keyword">output</span>(<span class="string">"result"</span>)</code></pre>
+      </div>
+    </div>
+
+    <h3>Branching (If/Else)</h3>
+
+    <div class="two-col">
+      <div>
+        <h4>🇩🇪 German</h4>
+<pre><code><span class="keyword">falls</span> x > 0:
+    <span class="keyword">ausgabe</span>(<span class="string">"positiv"</span>)
+<span class="keyword">sonst</span>:
+    <span class="keyword">ausgabe</span>(<span class="string">"nicht positiv"</span>)</code></pre>
+      </div>
+      <div>
+        <h4>🇬🇧 English</h4>
+<pre><code><span class="keyword">if</span> x > 0:
+    <span class="keyword">output</span>(<span class="string">"positive"</span>)
+<span class="keyword">else</span>:
+    <span class="keyword">output</span>(<span class="string">"not positive"</span>)</code></pre>
+      </div>
+    </div>
+
+    <div class="note">
+      You can set custom column widths with <code>[ratio, ratio]</code>:<br>
+      <code>falls x > 0 [0.7, 0.3]:</code> — 70% for true, 30% for false.
+    </div>
+
+    <h3>Switch / Case</h3>
+
+    <div class="two-col">
+      <div>
+        <h4>🇩🇪 German</h4>
+<pre><code><span class="keyword">unterscheide</span> farbe:
+    <span class="keyword">fall</span> <span class="string">"rot"</span>:
+        <span class="keyword">ausgabe</span>(<span class="string">"stopp"</span>)
+    <span class="keyword">fall</span> <span class="string">"grün"</span>:
+        <span class="keyword">ausgabe</span>(<span class="string">"los"</span>)
+    <span class="keyword">sonst</span>:
+        <span class="keyword">ausgabe</span>(<span class="string">"unbekannt"</span>)</code></pre>
+      </div>
+      <div>
+        <h4>🇬🇧 English</h4>
+<pre><code><span class="keyword">switch</span> color:
+    <span class="keyword">case</span> <span class="string">"red"</span>:
+        <span class="keyword">output</span>(<span class="string">"stop"</span>)
+    <span class="keyword">case</span> <span class="string">"green"</span>:
+        <span class="keyword">output</span>(<span class="string">"go"</span>)
+    <span class="keyword">else</span>:
+        <span class="keyword">output</span>(<span class="string">"unknown"</span>)</code></pre>
+      </div>
+    </div>
+
+    <div class="note">
+      Column widths also work for switch: <code>unterscheide farbe [0.4, 0.3, 0.3]:</code>
+    </div>
+
+    <h3>Loops</h3>
+
+    <div class="two-col">
+      <div>
+        <h4>🇩🇪 German</h4>
+<pre><code><span class="comment">// Count loop (for)</span>
+<span class="keyword">wiederhole für</span> i = 1 <span class="keyword">bis</span> 10:
+    <span class="keyword">ausgabe</span>(i)
+
+<span class="comment">// Head loop (while)</span>
+<span class="keyword">wiederhole solange</span> x > 0:
+    x = x - 1
+
+<span class="comment">// Foot loop (do-while)</span>
+<span class="keyword">wiederhole</span>:
+    <span class="keyword">eingabe</span>(<span class="string">"Wert"</span>)
+<span class="keyword">solange</span> wert != 0</code></pre>
+      </div>
+      <div>
+        <h4>🇬🇧 English</h4>
+<pre><code><span class="comment">// Count loop (for)</span>
+<span class="keyword">repeat for</span> i = 1 <span class="keyword">to</span> 10:
+    <span class="keyword">output</span>(i)
+
+<span class="comment">// Head loop (while)</span>
+<span class="keyword">repeat while</span> x > 0:
+    x = x - 1
+
+<span class="comment">// Foot loop (do-while)</span>
+<span class="keyword">repeat</span>:
+    <span class="keyword">input</span>(<span class="string">"value"</span>)
+<span class="keyword">while</span> value != 0</code></pre>
+      </div>
+    </div>
+
+    <h3>Functions</h3>
+
+    <div class="two-col">
+      <div>
+        <h4>🇩🇪 German</h4>
+<pre><code><span class="keyword">funktion</span> factorial(n):
+    <span class="keyword">falls</span> n &lt;= 1:
+        ergebnis = 1
+    <span class="keyword">sonst</span>:
+        ergebnis = n * factorial(n - 1)</code></pre>
+      </div>
+      <div>
+        <h4>🇬🇧 English</h4>
+<pre><code><span class="keyword">function</span> factorial(n):
+    <span class="keyword">if</span> n &lt;= 1:
+        result = 1
+    <span class="keyword">else</span>:
+        result = n * factorial(n - 1)</code></pre>
+      </div>
+    </div>
+
+    <h3>Try / Catch</h3>
+
+    <div class="two-col">
+      <div>
+        <h4>🇩🇪 German</h4>
+<pre><code><span class="keyword">versuche</span>:
+    x = parse(eingabe)
+<span class="keyword">fange</span> Exception e:
+    <span class="keyword">ausgabe</span>(<span class="string">"Fehler"</span>)</code></pre>
+      </div>
+      <div>
+        <h4>🇬🇧 English</h4>
+<pre><code><span class="keyword">try</span>:
+    x = parse(input)
+<span class="keyword">catch</span> Exception e:
+    <span class="keyword">output</span>(<span class="string">"error"</span>)</code></pre>
+      </div>
+    </div>
+
+    <h3>Line Breaks</h3>
+
+    <p>Use <code>\n</code> in node text for manual line breaks within a single node. In the visual editor, press <strong>Shift+Enter</strong> while editing a node.</p>
+
+    <!-- ───────────────────────────────────────── -->
+
+    <h2>Keyword Reference</h2>
+
+    <table>
+      <tr><th>Concept</th><th>German</th><th>English</th></tr>
+      <tr><td>If</td><td><code>falls</code></td><td><code>if</code></td></tr>
+      <tr><td>Else</td><td><code>sonst</code></td><td><code>else</code></td></tr>
+      <tr><td>Repeat</td><td><code>wiederhole</code></td><td><code>repeat</code></td></tr>
+      <tr><td>While</td><td><code>solange</code></td><td><code>while</code></td></tr>
+      <tr><td>For</td><td><code>für</code></td><td><code>for</code></td></tr>
+      <tr><td>To (range)</td><td><code>bis</code></td><td><code>to</code></td></tr>
+      <tr><td>Switch</td><td><code>unterscheide</code></td><td><code>switch</code></td></tr>
+      <tr><td>Case</td><td><code>fall</code></td><td><code>case</code></td></tr>
+      <tr><td>Function</td><td><code>funktion</code></td><td><code>function</code></td></tr>
+      <tr><td>Try</td><td><code>versuche</code></td><td><code>try</code></td></tr>
+      <tr><td>Catch</td><td><code>fange</code></td><td><code>catch</code></td></tr>
+      <tr><td>Input</td><td><code>eingabe</code></td><td><code>input</code></td></tr>
+      <tr><td>Output</td><td><code>ausgabe</code></td><td><code>output</code></td></tr>
+      <tr><td>True label</td><td>Wahr</td><td>True</td></tr>
+      <tr><td>False label</td><td>Falsch</td><td>False</td></tr>
+      <tr><td>Default label</td><td>Sonst</td><td>Default</td></tr>
+    </table>
+
+    <!-- ───────────────────────────────────────── -->
+
+    <h2>Web Components</h2>
+
+    <h3><code>&lt;struktolab-editor&gt;</code></h3>
+
+    <p>A full-featured visual structogram editor with toolbar, pseudocode sync, and import/export.</p>
+
+    <h4>Basic Usage</h4>
+<pre><code><span class="comment">&lt;!-- Load the script --&gt;</span>
+<span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="string">"struktolab-editor.js"</span><span class="tag">&gt;&lt;/script&gt;</span>
+
+<span class="comment">&lt;!-- Empty editor --&gt;</span>
+<span class="tag">&lt;struktolab-editor</span> <span class="attr">font-size</span>=<span class="string">"14"</span><span class="tag">&gt;&lt;/struktolab-editor&gt;</span>
+
+<span class="comment">&lt;!-- With pseudocode --&gt;</span>
+<span class="tag">&lt;struktolab-editor</span> <span class="attr">font-size</span>=<span class="string">"14"</span> <span class="attr">lang</span>=<span class="string">"en"</span><span class="tag">&gt;</span>
+  <span class="tag">&lt;script</span> <span class="attr">type</span>=<span class="string">"text/pseudocode"</span><span class="tag">&gt;</span>
+    input("number n")
+    result = 1
+    repeat for i = 1 to n:
+        result = result * i
+    output(result)
+  <span class="tag">&lt;/script&gt;</span>
+<span class="tag">&lt;/struktolab-editor&gt;</span>
+
+<span class="comment">&lt;!-- With JSON --&gt;</span>
+<span class="tag">&lt;struktolab-editor</span> <span class="attr">font-size</span>=<span class="string">"14"</span><span class="tag">&gt;</span>
+  <span class="tag">&lt;script</span> <span class="attr">type</span>=<span class="string">"application/json"</span><span class="tag">&gt;</span>
+    { "type": "TaskNode", "text": "x = 42" }
+  <span class="tag">&lt;/script&gt;</span>
+<span class="tag">&lt;/struktolab-editor&gt;</span>
+
+<span class="comment">&lt;!-- From external JSON file --&gt;</span>
+<span class="tag">&lt;struktolab-editor</span> <span class="attr">src</span>=<span class="string">"my-diagram.json"</span><span class="tag">&gt;&lt;/struktolab-editor&gt;</span></code></pre>
+
+    <h4>Attributes</h4>
+    <table>
+      <tr><th>Attribute</th><th>Description</th><th>Default</th></tr>
+      <tr><td><code>width</code></td><td>Fixed width in pixels (auto-sizes if omitted)</td><td>auto</td></tr>
+      <tr><td><code>font-size</code></td><td>Font size in pixels</td><td><code>14</code></td></tr>
+      <tr><td><code>lang</code></td><td>Pseudocode language: <code>de</code> or <code>en</code></td><td><code>de</code></td></tr>
+      <tr><td><code>src</code></td><td>URL to a JSON tree file</td><td>—</td></tr>
+    </table>
+
+    <h4>JavaScript API</h4>
+<pre><code><span class="keyword">const</span> editor = document.querySelector(<span class="string">'struktolab-editor'</span>);
+
+<span class="comment">// Get / set the tree object</span>
+editor.tree = { type: <span class="string">"TaskNode"</span>, text: <span class="string">"hello"</span> };
+console.log(editor.tree);
+
+<span class="comment">// Set from pseudocode string</span>
+editor.pseudocode = <span class="string">'input("name")\noutput("Hello " + name)'</span>;
+
+<span class="comment">// Code generation</span>
+editor.toCode(<span class="string">'python'</span>);     <span class="comment">// → Python code</span>
+editor.toCode(<span class="string">'java'</span>);       <span class="comment">// → Java code</span>
+editor.toCode(<span class="string">'javascript'</span>); <span class="comment">// → JavaScript code</span>
+
+<span class="comment">// Save / Load JSON (clean, no internal IDs)</span>
+<span class="keyword">const</span> json = editor.saveJSON();
+editor.loadJSON(json);
+
+<span class="comment">// Export as image</span>
+<span class="keyword">const</span> pngBlob = <span class="keyword">await</span> editor.exportImage(<span class="string">'png'</span>);
+<span class="keyword">const</span> svgBlob = <span class="keyword">await</span> editor.exportImage(<span class="string">'svg'</span>);
+
+<span class="comment">// Programmatic update (re-renders + emits change event)</span>
+editor.change({ type: <span class="string">"TaskNode"</span>, text: <span class="string">"updated"</span> });
+
+<span class="comment">// Listen for changes</span>
+editor.addEventListener(<span class="string">'change'</span>, (e) => {
+  console.log(<span class="string">'Tree changed:'</span>, e.detail.tree);
+});</code></pre>
+
+    <h3><code>&lt;struktolab-renderer&gt;</code></h3>
+
+    <p>A read-only SVG renderer for displaying structograms. Same attributes and tree format as the editor, but without editing capabilities.</p>
+
+<pre><code><span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="string">"struktolab-renderer.js"</span><span class="tag">&gt;&lt;/script&gt;</span>
+
+<span class="tag">&lt;struktolab-renderer</span> <span class="attr">font-size</span>=<span class="string">"14"</span> <span class="attr">lang</span>=<span class="string">"en"</span><span class="tag">&gt;</span>
+  <span class="tag">&lt;script</span> <span class="attr">type</span>=<span class="string">"text/pseudocode"</span><span class="tag">&gt;</span>
+    if x > 0:
+        output("positive")
+    else:
+        output("not positive")
+  <span class="tag">&lt;/script&gt;</span>
+<span class="tag">&lt;/struktolab-renderer&gt;</span></code></pre>
+
+    <h4>Renderer API</h4>
+<pre><code><span class="keyword">const</span> renderer = document.querySelector(<span class="string">'struktolab-renderer'</span>);
+
+<span class="comment">// Set tree or pseudocode</span>
+renderer.tree = { type: <span class="string">"TaskNode"</span>, text: <span class="string">"hello"</span> };
+renderer.pseudocode = <span class="string">'output("hello")'</span>;
+
+<span class="comment">// Code generation</span>
+renderer.toCode(<span class="string">'python'</span>);</code></pre>
+
+    <!-- ───────────────────────────────────────── -->
+
+    <h2>JSON Tree Format</h2>
+
+    <p>The tree is a nested JSON structure. Each node has a <code>type</code>, optional <code>text</code>, and a <code>followElement</code> for the next sibling.</p>
+
+    <h4>Node Types</h4>
+    <table>
+      <tr><th>Type</th><th>Properties</th></tr>
+      <tr><td><code>TaskNode</code></td><td><code>text</code>, <code>followElement</code></td></tr>
+      <tr><td><code>InputNode</code></td><td><code>text</code>, <code>followElement</code></td></tr>
+      <tr><td><code>OutputNode</code></td><td><code>text</code>, <code>followElement</code></td></tr>
+      <tr><td><code>BranchNode</code></td><td><code>text</code>, <code>trueChild</code>, <code>falseChild</code>, <code>columnWidths</code>, <code>followElement</code></td></tr>
+      <tr><td><code>CaseNode</code></td><td><code>text</code>, <code>cases</code> (array of InsertCase), <code>defaultOn</code>, <code>defaultNode</code>, <code>columnWidths</code>, <code>followElement</code></td></tr>
+      <tr><td><code>HeadLoopNode</code></td><td><code>text</code>, <code>child</code>, <code>followElement</code></td></tr>
+      <tr><td><code>FootLoopNode</code></td><td><code>text</code>, <code>child</code>, <code>followElement</code></td></tr>
+      <tr><td><code>CountLoopNode</code></td><td><code>text</code>, <code>child</code>, <code>followElement</code></td></tr>
+      <tr><td><code>FunctionNode</code></td><td><code>text</code>, <code>parameters</code> (array), <code>child</code>, <code>followElement</code></td></tr>
+      <tr><td><code>TryCatchNode</code></td><td><code>text</code>, <code>tryChild</code>, <code>catchChild</code>, <code>followElement</code></td></tr>
+    </table>
+
+    <h4>Example</h4>
+<pre><code>{
+  <span class="string">"type"</span>: <span class="string">"BranchNode"</span>,
+  <span class="string">"text"</span>: <span class="string">"x > 0"</span>,
+  <span class="string">"columnWidths"</span>: [0.6, 0.4],
+  <span class="string">"trueChild"</span>: {
+    <span class="string">"type"</span>: <span class="string">"OutputNode"</span>,
+    <span class="string">"text"</span>: <span class="string">"positive"</span>
+  },
+  <span class="string">"falseChild"</span>: {
+    <span class="string">"type"</span>: <span class="string">"OutputNode"</span>,
+    <span class="string">"text"</span>: <span class="string">"not positive"</span>
+  },
+  <span class="string">"followElement"</span>: {
+    <span class="string">"type"</span>: <span class="string">"TaskNode"</span>,
+    <span class="string">"text"</span>: <span class="string">"done"</span>
+  }
+}</code></pre>
+
+    <!-- ───────────────────────────────────────── -->
+
+    <h2>Shareable URLs</h2>
+
+    <p>StruktoLab encodes the entire structogram state in the URL hash using <a href="https://github.com/nickstenning/pako" target="_blank">pako</a> (zlib compression). This makes diagrams shareable via a single link — no server required.</p>
+
+    <p>URLs from <a href="https://struktolab.openpatch.org" target="_blank">struktolab.openpatch.org</a> are compatible and can be opened directly.</p>
+
+    <p>Format: <code>#pako:&lt;base64url-compressed-json&gt;</code></p>
+
+    <p>The compressed JSON contains:</p>
+<pre><code>{
+  <span class="string">"origin"</span>: <span class="string">"https://example.com"</span>,
+  <span class="string">"version"</span>: 2,
+  <span class="string">"model"</span>: { <span class="comment">/* tree JSON */</span> },
+  <span class="string">"settings"</span>: { <span class="string">"lang"</span>: <span class="string">"de"</span>, <span class="string">"fontSize"</span>: <span class="string">"14"</span> }
+}</code></pre>
+
+    <footer>
+      Built with ❤️ by <a href="https://openpatch.org" target="_blank">OpenPatch</a>
+      <br>
+      <a href="documentation.html">Documentation</a>
+      <span class="sep">•</span>
+      <a href="https://github.com/openpatch/struktolab" target="_blank">GitHub</a>
+    </footer>
+  </div>
+</body>
+</html>

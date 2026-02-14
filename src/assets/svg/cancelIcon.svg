@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg"
-     xmlns:xlink="http://www.w3.org/1999/xlink"
-     viewBox="0 0 100 100">
-  <line x1="15%" y1="15%" x2="85%" y2="85%" stroke="white" stroke-linecap="round" stroke-width="15%" />
-  <line x1="15%" y1="85%" x2="85%" y2="15%" stroke="white" stroke-linecap="round" stroke-width="15%" />
-  <line x1="15%" y1="15%" x2="85%" y2="85%" stroke="rgb(38, 64, 64)" stroke-linecap="round" stroke-width="10%" />
-  <line x1="15%" y1="85%" x2="85%" y2="15%" stroke="rgb(38, 64, 64)" stroke-linecap="round" stroke-width="10%" />
-</svg>

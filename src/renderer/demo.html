@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Struktog Renderer Demo</title>
+  <style>
+    body { font-family: sans-serif; max-width: 900px; margin: 2em auto; padding: 0 1em; }
+    h1 { color: #333; }
+    .example { margin: 2em 0; }
+    h2 { color: #555; margin-bottom: 0.5em; }
+  </style>
+  <script src="struktolab-renderer.js"></script>
+</head>
+<body>
+  <h1>Struktog SVG Renderer – Demo</h1>
+
+  <div class="example">
+    <h2>Simple Task Nodes</h2>
+    <struktolab-renderer font-size="14">
+      <script type="application/json">
+      {
+        "type": "InsertNode",
+        "followElement": {
+          "type": "InputNode",
+          "text": "Zahl n einlesen",
+          "followElement": {
+            "type": "InsertNode",
+            "followElement": {
+              "type": "TaskNode",
+              "text": "ergebnis = 1",
+              "followElement": {
+                "type": "InsertNode",
+                "followElement": {
+                  "type": "OutputNode",
+                  "text": "ergebnis ausgeben",
+                  "followElement": {
+                    "type": "InsertNode",
+                    "followElement": null
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Branch (If/Else)</h2>
+    <struktolab-renderer font-size="14">
+      <script type="application/json">
+      {
+        "type": "InsertNode",
+        "followElement": {
+          "type": "BranchNode",
+          "text": "x > 0",
+          "trueChild": {
+            "type": "InsertNode",
+            "followElement": {
+              "type": "TaskNode",
+              "text": "positiv",
+              "followElement": {
+                "type": "InsertNode",
+                "followElement": { "type": "Placeholder" }
+              }
+            }
+          },
+          "falseChild": {
+            "type": "InsertNode",
+            "followElement": {
+              "type": "TaskNode",
+              "text": "nicht positiv",
+              "followElement": {
+                "type": "InsertNode",
+                "followElement": { "type": "Placeholder" }
+              }
+            }
+          },
+          "followElement": {
+            "type": "InsertNode",
+            "followElement": null
+          }
+        }
+      }
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Head-controlled Loop</h2>
+    <struktolab-renderer font-size="14">
+      <script type="application/json">
+      {
+        "type": "InsertNode",
+        "followElement": {
+          "type": "HeadLoopNode",
+          "text": "solange i < 10",
+          "child": {
+            "type": "InsertNode",
+            "followElement": {
+              "type": "TaskNode",
+              "text": "i = i + 1",
+              "followElement": {
+                "type": "InsertNode",
+                "followElement": { "type": "Placeholder" }
+              }
+            }
+          },
+          "followElement": {
+            "type": "InsertNode",
+            "followElement": null
+          }
+        }
+      }
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Foot-controlled Loop</h2>
+    <struktolab-renderer font-size="14">
+      <script type="application/json">
+      {
+        "type": "InsertNode",
+        "followElement": {
+          "type": "FootLoopNode",
+          "text": "solange eingabe != 0",
+          "child": {
+            "type": "InsertNode",
+            "followElement": {
+              "type": "InputNode",
+              "text": "eingabe einlesen",
+              "followElement": {
+                "type": "InsertNode",
+                "followElement": { "type": "Placeholder" }
+              }
+            }
+          },
+          "followElement": {
+            "type": "InsertNode",
+            "followElement": null
+          }
+        }
+      }
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Case / Switch</h2>
+    <struktolab-renderer font-size="14">
+      <script type="application/json">
+      {
+        "type": "InsertNode",
+        "followElement": {
+          "type": "CaseNode",
+          "text": "farbe",
+          "defaultOn": true,
+          "defaultNode": {
+            "type": "InsertCase",
+            "text": "Sonst",
+            "followElement": {
+              "type": "InsertNode",
+              "followElement": {
+                "type": "TaskNode",
+                "text": "Fehler",
+                "followElement": {
+                  "type": "InsertNode",
+                  "followElement": { "type": "Placeholder" }
+                }
+              }
+            }
+          },
+          "cases": [
+            {
+              "type": "InsertCase",
+              "text": "rot",
+              "followElement": {
+                "type": "InsertNode",
+                "followElement": {
+                  "type": "TaskNode",
+                  "text": "stopp",
+                  "followElement": {
+                    "type": "InsertNode",
+                    "followElement": { "type": "Placeholder" }
+                  }
+                }
+              }
+            },
+            {
+              "type": "InsertCase",
+              "text": "grün",
+              "followElement": {
+                "type": "InsertNode",
+                "followElement": {
+                  "type": "TaskNode",
+                  "text": "fahren",
+                  "followElement": {
+                    "type": "InsertNode",
+                    "followElement": { "type": "Placeholder" }
+                  }
+                }
+              }
+            }
+          ],
+          "followElement": {
+            "type": "InsertNode",
+            "followElement": null
+          }
+        }
+      }
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Function Node</h2>
+    <struktolab-renderer font-size="14">
+      <script type="application/json">
+      {
+        "type": "InsertNode",
+        "followElement": {
+          "type": "FunctionNode",
+          "text": "factorial",
+          "parameters": [{"pos": "0", "parName": "n"}],
+          "child": {
+            "type": "InsertNode",
+            "followElement": {
+              "type": "BranchNode",
+              "text": "n <= 1",
+              "trueChild": {
+                "type": "InsertNode",
+                "followElement": {
+                  "type": "TaskNode",
+                  "text": "return 1",
+                  "followElement": {
+                    "type": "InsertNode",
+                    "followElement": { "type": "Placeholder" }
+                  }
+                }
+              },
+              "falseChild": {
+                "type": "InsertNode",
+                "followElement": {
+                  "type": "TaskNode",
+                  "text": "return n * factorial(n-1)",
+                  "followElement": {
+                    "type": "InsertNode",
+                    "followElement": { "type": "Placeholder" }
+                  }
+                }
+              },
+              "followElement": {
+                "type": "InsertNode",
+                "followElement": { "type": "Placeholder" }
+              }
+            }
+          },
+          "followElement": {
+            "type": "InsertNode",
+            "followElement": null
+          }
+        }
+      }
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Try-Catch</h2>
+    <struktolab-renderer font-size="14">
+      <script type="application/json">
+      {
+        "type": "InsertNode",
+        "followElement": {
+          "type": "TryCatchNode",
+          "text": "Exception e",
+          "tryChild": {
+            "type": "InsertNode",
+            "followElement": {
+              "type": "TaskNode",
+              "text": "datei öffnen",
+              "followElement": {
+                "type": "InsertNode",
+                "followElement": { "type": "Placeholder" }
+              }
+            }
+          },
+          "catchChild": {
+            "type": "InsertNode",
+            "followElement": {
+              "type": "OutputNode",
+              "text": "Fehler ausgeben",
+              "followElement": {
+                "type": "InsertNode",
+                "followElement": { "type": "Placeholder" }
+              }
+            }
+          },
+          "followElement": {
+            "type": "InsertNode",
+            "followElement": null
+          }
+        }
+      }
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Programmatic (JavaScript)</h2>
+    <struktolab-renderer id="programmatic" font-size="16"></struktolab-renderer>
+    <script>
+      document.getElementById('programmatic').tree = {
+"id":"89f581b0-de33-7094-59c9-6916ce21","type":"InsertNode","followElement":{"id":"c53fa15f-00c8-05af-bdeb-da9522be","type":"BranchNode","text":"hier ist meine lange Bedingung drin, die echt ziemlich lang ist, weil sie im Pseudocode und mit logischen Verknüpfungen dann ausartet","followElement":{"id":"12cc7a4a-dd3e-6aaa-bc18-58a10368","type":"InsertNode","followElement":null},"trueChild":{"id":"7378e71e-4c55-c49b-b112-df2d0f10","type":"InsertNode","followElement":{"id":"fab2943d-24a5-eea6-5569-5cb3b082","type":"BranchNode","text":"falls oben das wahr war, könnten wir mit diesem Abschnitt ja weiter machen...","followElement":{"id":"4ab15427-70a0-04d6-f114-1946ce82","type":"InsertNode","followElement":null},"trueChild":{"id":"249fdc63-ce9d-942a-4811-bcd53b7f","type":"InsertNode","followElement":{"id":"d9789191-053e-19cc-b6dd-8ba13656","type":"TaskNode","text":"sieht dann aber nicht ganz so gut aus","followElement":{"id":"9a8b0eb7-8f4c-c557-e7dc-22c53506","type":"InsertNode","followElement":null}}},"falseChild":{"id":"3634d8b2-31a6-3492-2d92-5dbbbf96","type":"InsertNode","followElement":{"id":"c4713977-4bb0-e28b-0ada-bbb76b83","type":"TaskNode","text":"wobei bei Anweisungen ein automatischer Zeilenumbruch integriert scheint, was sehr hilft","followElement":{"id":"8d4f3c06-64ca-7d17-e0c9-2a817677","type":"InsertNode","followElement":null}}}}},"falseChild":{"id":"d6a8bab5-a887-56ec-9f79-e7df6850","type":"InsertNode","followElement":{"id":"73022bb3-88ea-efe3-13f9-2fb1cbba","type":"BranchNode","text":"bei Bedingungen scheint das ja auch der Fall, nur zu spät, sodass die Schrägen durchstoßen werden","followElement":{"id":"bd774e7f-ef4a-8a9c-1ee9-a01822c5","type":"InsertNode","followElement":null},"trueChild":{"id":"fe607f0d-c215-f50c-5f87-00284624","type":"InsertNode","followElement":{"id":"63c59740-ea69-e3ed-49d5-9b72896f","type":"BranchNode","text":"und ab jetzt wird es dann ja kritsich","followElement":{"id":"6e94df46-4520-d5e7-d5cc-1de414a4","type":"InsertNode","followElement":null},"trueChild":{"id":"e97aa4b9-4609-9134-4226-e65f5495","type":"InsertNode","followElement":{"id":"cd434ada-9b74-9ab2-a81a-54d37b47","type":"TaskNode","text":"lange Anweisungen im Text gehen durch Zeilenumbruch gut","followElement":{"id":"fccb2761-150f-ffad-659f-54ce055c","type":"InsertNode","followElement":null}}},"falseChild":{"id":"55578343-f3be-c2df-b5f3-a160a5a4","type":"InsertNode","followElement":{"id":"96d27c79-3417-3d02-8b66-385003b4","type":"TaskNode","text":"befehle().dieImPseudocode(formuliertWerden).sindEherSchwerLesbar()","followElement":{"id":"f1e6acb4-9234-a882-59bd-eb1b88d9","type":"InsertNode","followElement":null}}}}},"falseChild":{"id":"193064fe-2ce9-96fa-34ed-7b90577f","type":"InsertNode","followElement":{"id":"485c4b09-bcec-52f5-fddc-b1ece181","type":"TaskNode","text":"eigentlich scheint es also nur an Befehlen zu liegen, da die keine Leerzeichen inne haben - und eben die eteas zerstörte Lesbarkeit beim Durchbrechen der Diagonalen der Bedingungen","followElement":{"id":"b52a702d-61e6-c211-64de-80a2ea22","type":"InsertNode","followElement":null}}}}}}
+      };
+    </script>
+  </div>
+
+  <hr>
+  <h1>Pseudocode Examples</h1>
+
+  <div class="example">
+    <h2>Simple Statements (Pseudocode)</h2>
+    <struktolab-renderer font-size="14">
+      <script type="text/pseudocode">
+eingabe("Zahl n")
+ergebnis = 1
+ausgabe("ergebnis")
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Branch (Pseudocode)</h2>
+    <struktolab-renderer font-size="14">
+      <script type="text/pseudocode">
+falls x > 0:
+    ausgabe("positiv")
+sonst:
+    ausgabe("nicht positiv")
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Branch with Column Widths (Pseudocode)</h2>
+    <struktolab-renderer font-size="14">
+      <script type="text/pseudocode">
+falls x > 0 [0.7, 0.3]:
+    ausgabe("positiv")
+    ausgabe("alles gut")
+sonst:
+    ausgabe("nein")
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Case with Column Widths (Pseudocode)</h2>
+    <struktolab-renderer font-size="14">
+      <script type="text/pseudocode">
+unterscheide farbe [0.5, 0.25, 0.25]:
+    fall rot:
+        ausgabe("stopp")
+    fall grün:
+        ausgabe("fahren")
+    sonst:
+        ausgabe("Fehler")
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Loops (Pseudocode)</h2>
+    <struktolab-renderer font-size="14">
+      <script type="text/pseudocode">
+wiederhole für i = 1 bis 10:
+    ausgabe("i")
+wiederhole solange x > 0:
+    x = x - 1
+wiederhole:
+    eingabe("Zahl")
+solange eingabe != 0
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Case / Switch (Pseudocode)</h2>
+    <struktolab-renderer font-size="14">
+      <script type="text/pseudocode">
+unterscheide farbe:
+    fall rot:
+        ausgabe("stopp")
+    fall grün:
+        ausgabe("fahren")
+    sonst:
+        ausgabe("Fehler")
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Function (Pseudocode)</h2>
+    <struktolab-renderer font-size="14">
+      <script type="text/pseudocode">
+funktion factorial(n):
+    falls n <= 1:
+        ergebnis = 1
+    sonst:
+        ergebnis = n * factorial(n-1)
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Try-Catch (Pseudocode)</h2>
+    <struktolab-renderer font-size="14">
+      <script type="text/pseudocode">
+versuche:
+    datei_öffnen()
+fange Exception e:
+    ausgabe("Fehler")
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Programmatic Pseudocode (JavaScript)</h2>
+    <struktolab-renderer id="pseudocode-programmatic" font-size="14"></struktolab-renderer>
+    <script>
+      document.getElementById('pseudocode-programmatic').pseudocode = `
+eingabe("Zahl n")
+wiederhole für i = 1 bis n:
+    ergebnis = ergebnis * i
+ausgabe("ergebnis")
+      `;
+    </script>
+  </div>
+
+  <hr>
+  <h1>English Pseudocode (lang="en")</h1>
+
+  <div class="example">
+    <h2>Branch &amp; Loop (English)</h2>
+    <struktolab-renderer font-size="14" lang="en">
+      <script type="text/pseudocode">
+input("number n")
+repeat for i = 1 to n:
+    result = result * i
+if result > 100 [0.6, 0.4]:
+    output("big")
+else:
+    output("small")
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Switch / Function / Try-Catch (English)</h2>
+    <struktolab-renderer font-size="14" lang="en">
+      <script type="text/pseudocode">
+function factorial(n):
+    if n <= 1:
+        result = 1
+    else:
+        result = n * factorial(n - 1)
+switch color:
+    case "red":
+        output("stop")
+    case "green":
+        output("go")
+    else:
+        output("unknown")
+try:
+    open_file()
+catch IOException e:
+    output("error")
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <div class="example">
+    <h2>Foot-controlled &amp; Head-controlled Loop (English)</h2>
+    <struktolab-renderer font-size="14" lang="en">
+      <script type="text/pseudocode">
+repeat while x > 0:
+    x = x - 1
+repeat:
+    input("value")
+while value != 0
+      </script>
+    </struktolab-renderer>
+  </div>
+
+  <hr>
+  <h1>Code Export</h1>
+
+  <div class="example">
+    <h2>Source Structogram</h2>
+    <struktolab-renderer id="code-export-source" font-size="14" lang="en">
+      <script type="text/pseudocode">
+input("number n")
+result = 1
+repeat for i = 1 to n:
+    result = result * i
+if result > 100:
+    output("big result")
+else:
+    output("small result")
+      </script>
+    </struktolab-renderer>
+
+    <h3>Generated Python</h3>
+    <pre id="code-python" style="background:#f5f5f5;padding:1em;border-radius:4px;overflow-x:auto;"></pre>
+    <h3>Generated Java</h3>
+    <pre id="code-java" style="background:#f5f5f5;padding:1em;border-radius:4px;overflow-x:auto;"></pre>
+    <h3>Generated JavaScript</h3>
+    <pre id="code-javascript" style="background:#f5f5f5;padding:1em;border-radius:4px;overflow-x:auto;"></pre>
+    <script>
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          var el = document.getElementById('code-export-source');
+          document.getElementById('code-python').textContent = el.toCode('python');
+          document.getElementById('code-java').textContent = el.toCode('java');
+          document.getElementById('code-javascript').textContent = el.toCode('javascript');
+        });
+      });
+    </script>
+  </div>
+</body>
+</html>
