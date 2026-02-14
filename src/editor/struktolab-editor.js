@@ -496,6 +496,20 @@ class StruktolabEditor extends HTMLElement {
     this._toolbar.appendChild(scaleLabel);
     this._scaleInput = scaleInput;
 
+    const colorModeLabel = document.createElement("label");
+    colorModeLabel.textContent = "Color Mode ";
+    const colorModeSelect = document.createElement("select");
+    colorModeSelect.innerHTML =
+      '<option value="color">Color</option><option value="bw">Black & White</option>';
+    colorModeSelect.value = this.getAttribute("color-mode") || "color";
+    colorModeSelect.addEventListener("change", () => {
+      this.setAttribute("color-mode", colorModeSelect.value);
+      this._render();
+    });
+    colorModeLabel.appendChild(colorModeSelect);
+    this._toolbar.appendChild(colorModeLabel);
+    
+
     // Separator
     const sep3 = document.createElement("span");
     sep3.className = "sep";
@@ -582,6 +596,8 @@ class StruktolabEditor extends HTMLElement {
     if (!this._tree) return;
     const fontSize = parseInt(this.getAttribute("font-size"), 10) || 14;
     const width = this._resolveWidth();
+    const colorMode = this.getAttribute("color-mode");
+    console.log(colorMode);
 
     // Remove old SVG (keep overlay)
     const oldSvg = this._editorArea.querySelector("svg");
@@ -592,7 +608,7 @@ class StruktolabEditor extends HTMLElement {
       (this._mode && this._mode.startsWith("insert:")) ||
       (this._mode && this._mode.startsWith("move:"));
     setInsertNodeHeight(showTargets ? INSERT_HEIGHT : 0);
-    const svg = renderStructogramSVG(this._tree, { width, fontSize });
+    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode });
     setInsertNodeHeight(0);
 
     // Add interactive overlays
@@ -1486,10 +1502,11 @@ class StruktolabEditor extends HTMLElement {
   async exportImage(format = "png") {
     const fontSize = parseInt(this.getAttribute("font-size"), 10) || 14;
     const width = this._resolveWidth();
+    const colorMode = this.getAttribute("color-mode");
 
     // Render a clean SVG (no insert-node space, no overlays)
     setInsertNodeHeight(0);
-    const svg = renderStructogramSVG(this._tree, { width, fontSize });
+    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode });
     setInsertNodeHeight(0);
 
     const serializer = new XMLSerializer();

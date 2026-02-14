@@ -1,18 +1,40 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const COLORS = {
-  TaskNode: "rgb(253, 237, 206)",
-  InputNode: "rgb(253, 237, 206)",
-  OutputNode: "rgb(253, 237, 206)",
-  HeadLoopNode: "rgb(220, 239, 231)",
-  CountLoopNode: "rgb(220, 239, 231)",
-  FootLoopNode: "rgb(220, 239, 231)",
-  BranchNode: "rgb(250, 218, 209)",
-  CaseNode: "rgb(250, 218, 209)",
-  InsertCase: "rgb(250, 218, 209)",
-  TryCatchNode: "rgb(250, 218, 209)",
-  FunctionNode: "rgb(255, 255, 255)",
+  color: {
+    TaskNode: "rgb(253, 237, 206)",
+    InputNode: "rgb(253, 237, 206)",
+    OutputNode: "rgb(253, 237, 206)",
+    HeadLoopNode: "rgb(220, 239, 231)",
+    CountLoopNode: "rgb(220, 239, 231)",
+    FootLoopNode: "rgb(220, 239, 231)",
+    BranchNode: "rgb(250, 218, 209)",
+    CaseNode: "rgb(250, 218, 209)",
+    InsertCase: "rgb(250, 218, 209)",
+    TryCatchNode: "rgb(250, 218, 209)",
+    FunctionNode: "rgb(255, 255, 255)",
+  },
+  bw: {
+    TaskNode: "rgb(250, 250, 250)",
+    InputNode: "rgb(250, 250, 250)",
+    OutputNode: "rgb(250, 250, 250)",
+    HeadLoopNode: "rgb(245, 245, 245)",
+    CountLoopNode: "rgb(245, 245, 245)",
+    FootLoopNode: "rgb(245, 245, 245)",
+    BranchNode: "rgb(240, 240, 240)",
+    CaseNode: "rgb(240, 240, 240)",
+    InsertCase: "rgb(240, 240, 240)",
+    TryCatchNode: "rgb(240, 240, 240)",
+    FunctionNode: "rgb(255, 255, 255)",
+  },
 };
+
+let COLOR_MODE = "color";
+
+function getColor(nodeType) {
+  console.log(COLOR_MODE);
+  return COLORS[COLOR_MODE][nodeType];
+}
 
 const DEFAULT_ROW_HEIGHT = 40;
 const LOOP_INDENT = 20;
@@ -23,7 +45,9 @@ const STROKE_WIDTH = 1.5;
 
 /* ── Editor insert-node spacing (0 by default, set by editor) ──── */
 let _insertNodeHeight = 0;
-export function setInsertNodeHeight(h) { _insertNodeHeight = h; }
+export function setInsertNodeHeight(h) {
+  _insertNodeHeight = h;
+}
 
 /* ── Text measurement & wrapping ─────────────────────────────── */
 
@@ -92,7 +116,8 @@ function svgEl(tag, attrs = {}) {
  * For multi-line text, uses <tspan> elements.
  */
 function textEl(str, x, y, h, fontSize, maxWidth, anchor = "start") {
-  const lines = maxWidth != null ? wrapText(str, maxWidth, fontSize) : [str || ""];
+  const lines =
+    maxWidth != null ? wrapText(str, maxWidth, fontSize) : [str || ""];
   const lineH = fontSize * 1.3;
   const totalTextH = lines.length * lineH;
   const startY = y + (h - totalTextH) / 2 + lineH / 2;
@@ -123,7 +148,10 @@ function bg(x, y, w, h, fill) {
 /** Single line */
 function ln(x1, y1, x2, y2) {
   return svgEl("line", {
-    x1, y1, x2, y2,
+    x1,
+    y1,
+    x2,
+    y2,
     stroke: STROKE_COLOR,
     "stroke-width": STROKE_WIDTH,
   });
@@ -138,7 +166,7 @@ function ln(x1, y1, x2, y2) {
  */
 function columnWidths(totalWidth, numCols, fractions) {
   if (fractions && fractions.length === numCols) {
-    return fractions.map(f => totalWidth * f);
+    return fractions.map((f) => totalWidth * f);
   }
   const w = totalWidth / numCols;
   return Array(numCols).fill(w);
@@ -154,7 +182,9 @@ function measureHeight(node, fontSize, width) {
 
   switch (node.type) {
     case "InsertNode":
-      return _insertNodeHeight + measureHeight(node.followElement, fontSize, width);
+      return (
+        _insertNodeHeight + measureHeight(node.followElement, fontSize, width)
+      );
     case "Placeholder":
       return 0;
     case "TaskNode":
@@ -179,7 +209,9 @@ function measureHeight(node, fontSize, width) {
       const trueH = measureHeight(node.trueChild, fontSize, colW[0]);
       const falseH = measureHeight(node.falseChild, fontSize, colW[1]);
       return (
-        headerH + Math.max(trueH, falseH) + measureHeight(node.followElement, fontSize, width)
+        headerH +
+        Math.max(trueH, falseH) +
+        measureHeight(node.followElement, fontSize, width)
       );
     }
     case "CaseNode": {
@@ -190,12 +222,20 @@ function measureHeight(node, fontSize, width) {
       const headerH = condH + slopeH;
       let maxChildH = 0;
       for (let i = 0; i < node.cases.length; i++) {
-        maxChildH = Math.max(maxChildH, measureHeight(node.cases[i], fontSize, colW[i]));
+        maxChildH = Math.max(
+          maxChildH,
+          measureHeight(node.cases[i], fontSize, colW[i]),
+        );
       }
       if (node.defaultOn && node.defaultNode) {
-        maxChildH = Math.max(maxChildH, measureHeight(node.defaultNode, fontSize, colW[numCols - 1]));
+        maxChildH = Math.max(
+          maxChildH,
+          measureHeight(node.defaultNode, fontSize, colW[numCols - 1]),
+        );
       }
-      return headerH + maxChildH + measureHeight(node.followElement, fontSize, width);
+      return (
+        headerH + maxChildH + measureHeight(node.followElement, fontSize, width)
+      );
     }
     case "HeadLoopNode":
     case "CountLoopNode": {
@@ -203,24 +243,21 @@ function measureHeight(node, fontSize, width) {
       const rowH = wrappedTextHeight(node.text || "", textW, fontSize);
       const childH = measureHeight(node.child, fontSize, innerW);
       const bodyH = Math.max(childH, rowH * 0.5);
-      return (
-        rowH + bodyH + measureHeight(node.followElement, fontSize, width)
-      );
+      return rowH + bodyH + measureHeight(node.followElement, fontSize, width);
     }
     case "FootLoopNode": {
       const innerW = width - LOOP_INDENT;
       const rowH = wrappedTextHeight(node.text || "", textW, fontSize);
       const childH = measureHeight(node.child, fontSize, innerW);
       const bodyH = Math.max(childH, rowH * 0.5);
-      return (
-        bodyH + rowH + measureHeight(node.followElement, fontSize, width)
-      );
+      return bodyH + rowH + measureHeight(node.followElement, fontSize, width);
     }
     case "FunctionNode": {
       const innerW = width - LOOP_INDENT;
       let headerText = node.text || "";
       if (node.parameters && node.parameters.length > 0) {
-        headerText += "(" + node.parameters.map((p) => p.parName || "").join(", ") + ")";
+        headerText +=
+          "(" + node.parameters.map((p) => p.parName || "").join(", ") + ")";
       } else {
         headerText += "()";
       }
@@ -230,7 +267,10 @@ function measureHeight(node, fontSize, width) {
       const bodyH = Math.max(childH, rowH * 0.5);
       const footH = DEFAULT_ROW_HEIGHT * 0.6;
       return (
-        rowH + bodyH + footH + measureHeight(node.followElement, fontSize, width)
+        rowH +
+        bodyH +
+        footH +
+        measureHeight(node.followElement, fontSize, width)
       );
     }
     case "TryCatchNode": {
@@ -244,7 +284,10 @@ function measureHeight(node, fontSize, width) {
       const catchH = measureHeight(node.catchChild, fontSize, innerW);
       const catchBodyH = Math.max(catchH, catchRowH * 0.5);
       return (
-        tryRowH + tryBodyH + catchRowH + catchBodyH +
+        tryRowH +
+        tryBodyH +
+        catchRowH +
+        catchBodyH +
         measureHeight(node.followElement, fontSize, width)
       );
     }
@@ -273,7 +316,14 @@ function renderNode(node, x, y, width, fontSize, availH) {
   switch (node.type) {
     case "InsertNode": {
       const inh = _insertNodeHeight;
-      const sub = renderNode(node.followElement, x, y + inh, width, fontSize, availH ? availH - inh : undefined);
+      const sub = renderNode(
+        node.followElement,
+        x,
+        y + inh,
+        width,
+        fontSize,
+        availH ? availH - inh : undefined,
+      );
       return { elements: sub.elements, height: inh + sub.height };
     }
 
@@ -283,7 +333,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
     case "TaskNode":
     case "InputNode":
     case "OutputNode": {
-      const color = COLORS[node.type];
+      const color = getColor(node.type);
       let label = node.text || "";
       if (node.type === "InputNode") label = "▶ " + label;
       if (node.type === "OutputNode") label = "◀ " + label;
@@ -292,8 +342,8 @@ function renderNode(node, x, y, width, fontSize, availH) {
       const followH = measureHeight(node.followElement, fontSize, width);
       // Stretch this node's bg if it (or its tail) is the last in a column
       const naturalH = rowH + followH;
-      const stretchH = (availH != null && availH > naturalH)
-        ? rowH + (availH - naturalH) : rowH;
+      const stretchH =
+        availH != null && availH > naturalH ? rowH + (availH - naturalH) : rowH;
 
       elements.push(bg(x, y, width, stretchH, color));
       elements.push(ln(x, y, x + width, y));
@@ -301,7 +351,14 @@ function renderNode(node, x, y, width, fontSize, availH) {
       elements.push(textEl(label, x + PADDING_X, y, rowH, fontSize, textW));
 
       const remainH = availH != null ? availH - stretchH : undefined;
-      const follow = renderNode(node.followElement, x, y + stretchH, width, fontSize, remainH);
+      const follow = renderNode(
+        node.followElement,
+        x,
+        y + stretchH,
+        width,
+        fontSize,
+        remainH,
+      );
       return {
         elements: elements.concat(follow.elements),
         height: stretchH + follow.height,
@@ -309,20 +366,29 @@ function renderNode(node, x, y, width, fontSize, availH) {
     }
 
     case "InsertCase": {
-      const color = COLORS.InsertCase;
+      const color = getColor(node.type);
       const rowH = wrappedTextHeight(node.text || "", textW, fontSize);
 
       const followH = measureHeight(node.followElement, fontSize, width);
       const naturalH = rowH + followH;
-      const stretchH = (availH != null && availH > naturalH)
-        ? rowH + (availH - naturalH) : rowH;
+      const stretchH =
+        availH != null && availH > naturalH ? rowH + (availH - naturalH) : rowH;
 
       elements.push(bg(x, y, width, stretchH, color));
       elements.push(ln(x, y, x, y + stretchH));
-      elements.push(textEl(node.text || "", x + PADDING_X, y, rowH, fontSize, textW));
+      elements.push(
+        textEl(node.text || "", x + PADDING_X, y, rowH, fontSize, textW),
+      );
 
       const remainH = availH != null ? availH - stretchH : undefined;
-      const follow = renderNode(node.followElement, x, y + stretchH, width, fontSize, remainH);
+      const follow = renderNode(
+        node.followElement,
+        x,
+        y + stretchH,
+        width,
+        fontSize,
+        remainH,
+      );
       return {
         elements: elements.concat(follow.elements),
         height: stretchH + follow.height,
@@ -330,7 +396,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
     }
 
     case "BranchNode": {
-      const color = COLORS.BranchNode;
+      const color = getColor(node.type);
       const condH = wrappedTextHeight(node.text || "", textW, fontSize);
       const slopeH = fontSize * 1.3 + PADDING_Y;
       const labelRowH = fontSize * 1.3 + PADDING_Y;
@@ -345,7 +411,15 @@ function renderNode(node, x, y, width, fontSize, availH) {
 
       // Condition text centered above slopes
       elements.push(
-        textEl(node.text || "", x + width / 2, y, condH, fontSize, textW, "middle")
+        textEl(
+          node.text || "",
+          x + width / 2,
+          y,
+          condH,
+          fontSize,
+          textW,
+          "middle",
+        ),
       );
       // Diagonal lines from condition bottom to divider at slope bottom
       const slopeBottom = y + condH + slopeH;
@@ -353,9 +427,19 @@ function renderNode(node, x, y, width, fontSize, availH) {
       elements.push(ln(x + width, y + condH, divX, slopeBottom));
       // True/False labels below slopes
       const smallFS = fontSize * 0.8;
-      elements.push(textEl("Wahr", x + PADDING_X, slopeBottom, labelRowH, smallFS, null));
       elements.push(
-        textEl("Falsch", x + width - PADDING_X, slopeBottom, labelRowH, smallFS, null, "end")
+        textEl("Wahr", x + PADDING_X, slopeBottom, labelRowH, smallFS, null),
+      );
+      elements.push(
+        textEl(
+          "Falsch",
+          x + width - PADDING_X,
+          slopeBottom,
+          labelRowH,
+          smallFS,
+          null,
+          "end",
+        ),
       );
       // Vertical divider in label row
       elements.push(ln(divX, slopeBottom, divX, y + headerH));
@@ -365,14 +449,30 @@ function renderNode(node, x, y, width, fontSize, availH) {
       const falseH = measureHeight(node.falseChild, fontSize, colW[1]);
       const followH = measureHeight(node.followElement, fontSize, width);
       const naturalChildH = Math.max(trueH, falseH);
-      const extraH = (availH != null && availH > headerH + naturalChildH + followH)
-        ? availH - headerH - naturalChildH - followH : 0;
+      const extraH =
+        availH != null && availH > headerH + naturalChildH + followH
+          ? availH - headerH - naturalChildH - followH
+          : 0;
       const childH = naturalChildH + extraH;
 
-      const trueResult = renderNode(node.trueChild, x, y + headerH, colW[0], fontSize, childH);
+      const trueResult = renderNode(
+        node.trueChild,
+        x,
+        y + headerH,
+        colW[0],
+        fontSize,
+        childH,
+      );
       elements.push(...trueResult.elements);
 
-      const falseResult = renderNode(node.falseChild, divX, y + headerH, colW[1], fontSize, childH);
+      const falseResult = renderNode(
+        node.falseChild,
+        divX,
+        y + headerH,
+        colW[1],
+        fontSize,
+        childH,
+      );
       elements.push(...falseResult.elements);
 
       // Vertical divider between true/false columns
@@ -380,7 +480,14 @@ function renderNode(node, x, y, width, fontSize, availH) {
 
       const totalH = headerH + childH;
       const remainH = availH != null ? availH - totalH : undefined;
-      const follow = renderNode(node.followElement, x, y + totalH, width, fontSize, remainH);
+      const follow = renderNode(
+        node.followElement,
+        x,
+        y + totalH,
+        width,
+        fontSize,
+        remainH,
+      );
       return {
         elements: elements.concat(follow.elements),
         height: totalH + follow.height,
@@ -388,7 +495,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
     }
 
     case "CaseNode": {
-      const color = COLORS.CaseNode;
+      const color = getColor(node.type);
       const numCols = node.cases.length + (node.defaultOn ? 1 : 0);
       const colW = columnWidths(width, numCols, node.columnWidths);
       const condH = wrappedTextHeight(node.text || "", textW, fontSize);
@@ -402,7 +509,15 @@ function renderNode(node, x, y, width, fontSize, availH) {
 
       // Condition text centered above slopes
       elements.push(
-        textEl(node.text || "", x + width / 2, y, condH, fontSize, textW, "middle")
+        textEl(
+          node.text || "",
+          x + width / 2,
+          y,
+          condH,
+          fontSize,
+          textW,
+          "middle",
+        ),
       );
 
       // Compute cumulative x positions for column dividers
@@ -421,7 +536,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
         for (let i = 1; i < numCols - 1; i++) {
           const dividerX = x + colXPositions[i];
           // Left diagonal goes from (x, y+condH) to (lastDivX, y+headerH)
-          const frac = (colXPositions[i]) / colXPositions[numCols - 1];
+          const frac = colXPositions[i] / colXPositions[numCols - 1];
           const diagY = y + condH + slopeH * frac;
           elements.push(ln(dividerX, diagY, dividerX, y + headerH));
         }
@@ -451,14 +566,23 @@ function renderNode(node, x, y, width, fontSize, availH) {
       }
 
       const followH = measureHeight(node.followElement, fontSize, width);
-      const extraCaseH = (availH != null && availH > headerH + maxChildH + followH)
-        ? availH - headerH - maxChildH - followH : 0;
+      const extraCaseH =
+        availH != null && availH > headerH + maxChildH + followH
+          ? availH - headerH - maxChildH - followH
+          : 0;
       maxChildH += extraCaseH;
 
       // Render each case column
       let curX = x;
       for (let i = 0; i < node.cases.length; i++) {
-        const caseResult = renderNode(node.cases[i], curX, y + headerH, colW[i], fontSize, maxChildH);
+        const caseResult = renderNode(
+          node.cases[i],
+          curX,
+          y + headerH,
+          colW[i],
+          fontSize,
+          maxChildH,
+        );
         elements.push(...caseResult.elements);
         if (i > 0) {
           elements.push(ln(curX, y + headerH, curX, y + headerH + maxChildH));
@@ -467,14 +591,28 @@ function renderNode(node, x, y, width, fontSize, availH) {
       }
       // Default case
       if (node.defaultOn && node.defaultNode) {
-        const defaultResult = renderNode(node.defaultNode, curX, y + headerH, colW[numCols - 1], fontSize, maxChildH);
+        const defaultResult = renderNode(
+          node.defaultNode,
+          curX,
+          y + headerH,
+          colW[numCols - 1],
+          fontSize,
+          maxChildH,
+        );
         elements.push(...defaultResult.elements);
         elements.push(ln(curX, y + headerH, curX, y + headerH + maxChildH));
       }
 
       const totalH = headerH + maxChildH;
       const remainH = availH != null ? availH - totalH : undefined;
-      const follow = renderNode(node.followElement, x, y + totalH, width, fontSize, remainH);
+      const follow = renderNode(
+        node.followElement,
+        x,
+        y + totalH,
+        width,
+        fontSize,
+        remainH,
+      );
       return {
         elements: elements.concat(follow.elements),
         height: totalH + follow.height,
@@ -483,13 +621,15 @@ function renderNode(node, x, y, width, fontSize, availH) {
 
     case "HeadLoopNode":
     case "CountLoopNode": {
-      const color = COLORS[node.type];
+      const color = getColor(node.type);
       const rowH = wrappedTextHeight(node.text || "", textW, fontSize);
 
       elements.push(bg(x, y, width, rowH, color));
       elements.push(ln(x, y, x + width, y));
       elements.push(ln(x, y, x, y + rowH));
-      elements.push(textEl(node.text || "", x + PADDING_X, y, rowH, fontSize, textW));
+      elements.push(
+        textEl(node.text || "", x + PADDING_X, y, rowH, fontSize, textW),
+      );
 
       // Child body (indented)
       const innerW = width - LOOP_INDENT;
@@ -498,16 +638,29 @@ function renderNode(node, x, y, width, fontSize, availH) {
 
       elements.push(bg(x, y + rowH, LOOP_INDENT, bodyH, color));
       elements.push(ln(x, y + rowH, x, y + rowH + bodyH));
-      elements.push(ln(x + LOOP_INDENT, y + rowH, x + LOOP_INDENT, y + rowH + bodyH));
+      elements.push(
+        ln(x + LOOP_INDENT, y + rowH, x + LOOP_INDENT, y + rowH + bodyH),
+      );
 
       const childResult = renderNode(
-        node.child, x + LOOP_INDENT, y + rowH, innerW, fontSize
+        node.child,
+        x + LOOP_INDENT,
+        y + rowH,
+        innerW,
+        fontSize,
       );
       elements.push(...childResult.elements);
 
       const totalH = rowH + bodyH;
       const remainH = availH != null ? availH - totalH : undefined;
-      const follow = renderNode(node.followElement, x, y + totalH, width, fontSize, remainH);
+      const follow = renderNode(
+        node.followElement,
+        x,
+        y + totalH,
+        width,
+        fontSize,
+        remainH,
+      );
       return {
         elements: elements.concat(follow.elements),
         height: totalH + follow.height,
@@ -515,7 +668,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
     }
 
     case "FootLoopNode": {
-      const color = COLORS.FootLoopNode;
+      const color = getColor(node.type);
       const innerW = width - LOOP_INDENT;
       const rowH = wrappedTextHeight(node.text || "", textW, fontSize);
       const childH = measureHeight(node.child, fontSize, innerW);
@@ -528,7 +681,11 @@ function renderNode(node, x, y, width, fontSize, availH) {
       elements.push(ln(x + LOOP_INDENT, y, x + LOOP_INDENT, y + bodyH));
 
       const childResult = renderNode(
-        node.child, x + LOOP_INDENT, y, innerW, fontSize
+        node.child,
+        x + LOOP_INDENT,
+        y,
+        innerW,
+        fontSize,
       );
       elements.push(...childResult.elements);
 
@@ -536,11 +693,27 @@ function renderNode(node, x, y, width, fontSize, availH) {
       elements.push(bg(x, y + bodyH, width, rowH, color));
       elements.push(ln(x + LOOP_INDENT, y + bodyH, x + width, y + bodyH));
       elements.push(ln(x, y + bodyH, x, y + bodyH + rowH));
-      elements.push(textEl(node.text || "", x + PADDING_X, y + bodyH, rowH, fontSize, textW));
+      elements.push(
+        textEl(
+          node.text || "",
+          x + PADDING_X,
+          y + bodyH,
+          rowH,
+          fontSize,
+          textW,
+        ),
+      );
 
       const totalH = bodyH + rowH;
       const remainH = availH != null ? availH - totalH : undefined;
-      const follow = renderNode(node.followElement, x, y + totalH, width, fontSize, remainH);
+      const follow = renderNode(
+        node.followElement,
+        x,
+        y + totalH,
+        width,
+        fontSize,
+        remainH,
+      );
       return {
         elements: elements.concat(follow.elements),
         height: totalH + follow.height,
@@ -548,7 +721,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
     }
 
     case "FunctionNode": {
-      const color = COLORS.FunctionNode;
+      const color = getColor(node.type);
       let headerText = node.text || "";
       if (node.parameters && node.parameters.length > 0) {
         const params = node.parameters.map((p) => p.parName || "").join(", ");
@@ -564,7 +737,9 @@ function renderNode(node, x, y, width, fontSize, availH) {
       elements.push(bg(x, y, width, rowH, color));
       elements.push(ln(x, y, x + width, y));
       elements.push(ln(x, y, x, y + rowH));
-      elements.push(textEl(headerText, x + PADDING_X, y, rowH, fontSize, textW));
+      elements.push(
+        textEl(headerText, x + PADDING_X, y, rowH, fontSize, textW),
+      );
 
       // Child body
       const innerW = width - LOOP_INDENT;
@@ -573,23 +748,40 @@ function renderNode(node, x, y, width, fontSize, availH) {
 
       elements.push(bg(x, y + rowH, LOOP_INDENT, bodyH, color));
       elements.push(ln(x, y + rowH, x, y + rowH + bodyH));
-      elements.push(ln(x + LOOP_INDENT, y + rowH, x + LOOP_INDENT, y + rowH + bodyH));
+      elements.push(
+        ln(x + LOOP_INDENT, y + rowH, x + LOOP_INDENT, y + rowH + bodyH),
+      );
 
       const childResult = renderNode(
-        node.child, x + LOOP_INDENT, y + rowH, innerW, fontSize
+        node.child,
+        x + LOOP_INDENT,
+        y + rowH,
+        innerW,
+        fontSize,
       );
       elements.push(...childResult.elements);
 
       // Footer "}"
       const footH = DEFAULT_ROW_HEIGHT * 0.6;
       elements.push(bg(x, y + rowH + bodyH, width, footH, color));
-      elements.push(ln(x + LOOP_INDENT, y + rowH + bodyH, x + width, y + rowH + bodyH));
+      elements.push(
+        ln(x + LOOP_INDENT, y + rowH + bodyH, x + width, y + rowH + bodyH),
+      );
       elements.push(ln(x, y + rowH + bodyH, x, y + rowH + bodyH + footH));
-      elements.push(textEl("}", x + PADDING_X, y + rowH + bodyH, footH, fontSize, null));
+      elements.push(
+        textEl("}", x + PADDING_X, y + rowH + bodyH, footH, fontSize, null),
+      );
 
       const totalH = rowH + bodyH + footH;
       const remainH = availH != null ? availH - totalH : undefined;
-      const follow = renderNode(node.followElement, x, y + totalH, width, fontSize, remainH);
+      const follow = renderNode(
+        node.followElement,
+        x,
+        y + totalH,
+        width,
+        fontSize,
+        remainH,
+      );
       return {
         elements: elements.concat(follow.elements),
         height: totalH + follow.height,
@@ -597,7 +789,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
     }
 
     case "TryCatchNode": {
-      const color = COLORS.TryCatchNode;
+      const color = getColor(node.type);
       const innerW = width - LOOP_INDENT;
 
       // Try header
@@ -613,10 +805,21 @@ function renderNode(node, x, y, width, fontSize, availH) {
 
       elements.push(bg(x, y + tryRowH, LOOP_INDENT, tryBodyH, color));
       elements.push(ln(x, y + tryRowH, x, y + tryRowH + tryBodyH));
-      elements.push(ln(x + LOOP_INDENT, y + tryRowH, x + LOOP_INDENT, y + tryRowH + tryBodyH));
+      elements.push(
+        ln(
+          x + LOOP_INDENT,
+          y + tryRowH,
+          x + LOOP_INDENT,
+          y + tryRowH + tryBodyH,
+        ),
+      );
 
       const tryResult = renderNode(
-        node.tryChild, x + LOOP_INDENT, y + tryRowH, innerW, fontSize
+        node.tryChild,
+        x + LOOP_INDENT,
+        y + tryRowH,
+        innerW,
+        fontSize,
       );
       elements.push(...tryResult.elements);
 
@@ -628,25 +831,54 @@ function renderNode(node, x, y, width, fontSize, availH) {
       elements.push(bg(x, catchY, width, catchRowH, color));
       elements.push(ln(x + LOOP_INDENT, catchY, x + width, catchY));
       elements.push(ln(x, catchY, x, catchY + catchRowH));
-      elements.push(textEl(catchLabel, x + PADDING_X, catchY, catchRowH, fontSize, textW));
+      elements.push(
+        textEl(catchLabel, x + PADDING_X, catchY, catchRowH, fontSize, textW),
+      );
 
       // Catch body
       const catchH = measureHeight(node.catchChild, fontSize, innerW);
       const catchBodyH = Math.max(catchH, catchRowH * 0.5);
 
       elements.push(bg(x, catchY + catchRowH, LOOP_INDENT, catchBodyH, color));
-      elements.push(ln(x, catchY + catchRowH, x, catchY + catchRowH + catchBodyH));
-      elements.push(ln(x + LOOP_INDENT, catchY + catchRowH, x + LOOP_INDENT, catchY + catchRowH + catchBodyH));
-      elements.push(ln(x, catchY + catchRowH + catchBodyH, x + LOOP_INDENT, catchY + catchRowH + catchBodyH));
+      elements.push(
+        ln(x, catchY + catchRowH, x, catchY + catchRowH + catchBodyH),
+      );
+      elements.push(
+        ln(
+          x + LOOP_INDENT,
+          catchY + catchRowH,
+          x + LOOP_INDENT,
+          catchY + catchRowH + catchBodyH,
+        ),
+      );
+      elements.push(
+        ln(
+          x,
+          catchY + catchRowH + catchBodyH,
+          x + LOOP_INDENT,
+          catchY + catchRowH + catchBodyH,
+        ),
+      );
 
       const catchResult = renderNode(
-        node.catchChild, x + LOOP_INDENT, catchY + catchRowH, innerW, fontSize
+        node.catchChild,
+        x + LOOP_INDENT,
+        catchY + catchRowH,
+        innerW,
+        fontSize,
       );
       elements.push(...catchResult.elements);
 
       const totalH = tryRowH + tryBodyH + catchRowH + catchBodyH;
       const remainH = availH != null ? availH - totalH : undefined;
-      const follow = renderNode(node.followElement, x, y + totalH, width, fontSize, remainH);
+      const follow = renderNode(
+        node.followElement,
+        x,
+        y + totalH,
+        width,
+        fontSize,
+        remainH,
+      );
       return {
         elements: elements.concat(follow.elements),
         height: totalH + follow.height,
@@ -664,11 +896,15 @@ function renderNode(node, x, y, width, fontSize, availH) {
  * @param {Object} [options]
  * @param {number} [options.width=600] - SVG coordinate width (used for layout calculations)
  * @param {number} [options.fontSize=14] - Font size in px
+ * @param {string} [options.colorMode] - "color" (default) or "bw" for black-and-white colors
  * @returns {SVGSVGElement}
  */
 export function renderStructogramSVG(tree, options = {}) {
   const width = options.width || 600;
   const fontSize = options.fontSize || 14;
+  if (options.colorMode && COLORS[options.colorMode]) {
+    COLOR_MODE = options.colorMode;
+  }
 
   const totalHeight = measureHeight(tree, fontSize, width);
   const h = totalHeight || 40;
