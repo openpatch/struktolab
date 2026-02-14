@@ -32,7 +32,6 @@ const COLORS = {
 let COLOR_MODE = "color";
 
 function getColor(nodeType) {
-  console.log(COLOR_MODE);
   return COLORS[COLOR_MODE][nodeType];
 }
 

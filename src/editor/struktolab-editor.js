@@ -451,8 +451,7 @@ class StruktolabEditor extends HTMLElement {
     langSelect.addEventListener("change", () => {
       this.setAttribute("lang", langSelect.value);
       this._keywords = null;
-      this._render();
-      this._syncTreeToPseudocode();
+      this._onTreeChange();
     });
     langLabel.appendChild(langSelect);
     this._toolbar.appendChild(langLabel);
@@ -468,7 +467,7 @@ class StruktolabEditor extends HTMLElement {
     fsInput.value = this.getAttribute("font-size") || "14";
     fsInput.addEventListener("change", () => {
       this.setAttribute("font-size", fsInput.value);
-      this._render();
+      this._onTreeChange();
     });
     fsLabel.appendChild(fsInput);
     this._toolbar.appendChild(fsLabel);
@@ -490,7 +489,7 @@ class StruktolabEditor extends HTMLElement {
       } else {
         scaleInput.value = this.getAttribute("scale") || "1";
       }
-      this._render();
+      this._onTreeChange();
     });
     scaleLabel.appendChild(scaleInput);
     this._toolbar.appendChild(scaleLabel);
@@ -504,7 +503,7 @@ class StruktolabEditor extends HTMLElement {
     colorModeSelect.value = this.getAttribute("color-mode") || "color";
     colorModeSelect.addEventListener("change", () => {
       this.setAttribute("color-mode", colorModeSelect.value);
-      this._render();
+      this._onTreeChange();
     });
     colorModeLabel.appendChild(colorModeSelect);
     this._toolbar.appendChild(colorModeLabel);
@@ -597,7 +596,6 @@ class StruktolabEditor extends HTMLElement {
     const fontSize = parseInt(this.getAttribute("font-size"), 10) || 14;
     const width = this._resolveWidth();
     const colorMode = this.getAttribute("color-mode");
-    console.log(colorMode);
 
     // Remove old SVG (keep overlay)
     const oldSvg = this._editorArea.querySelector("svg");

@@ -20,6 +20,15 @@ export function loadFromHash(editor) {
       if (state.settings && state.settings.lang) {
         editor.setAttribute("lang", state.settings.lang === "en" ? "en" : "de");
       }
+      if (state.settings && state.settings.fontSize) {
+        editor.setAttribute("font-size", state.settings.fontSize);
+      }
+      if (state.settings && state.settings.colorMode) {
+        editor.setAttribute("color-mode", state.settings.colorMode);
+      }
+      if (state.settings && state.settings.scale) {
+        editor.setAttribute("scale", state.settings.scale);
+      }
       return true;
     }
   } catch (e) {
@@ -37,6 +46,8 @@ export function saveToHash(editor) {
       settings: {
         lang: editor.getAttribute("lang") || "de",
         fontSize: editor.getAttribute("font-size") || "14",
+        colorMode: editor.getAttribute("color-mode") || "color",
+        scale: editor.getAttribute("scale") || "1",
       },
     };
     const json = JSON.stringify(state);
