@@ -10,6 +10,8 @@ import { generateCode } from "../common/code-generator.js";
  *   font-size  — font size in px (default: 14)
  *   src        — URL to fetch JSON tree from
  *   lang       — pseudocode language: "de" (default) or "en"
+ *   scale       — (optional) scale factor for the SVG (e.g. "0.5" for 50% size)
+ *   color-mode   — (optional) "light" (default) or "dark" for color scheme
  *
  * Setting the tree:
  *   1. JS property:  element.tree = { ... }
@@ -37,7 +39,7 @@ import { generateCode } from "../common/code-generator.js";
  */
 class StruktolabRenderer extends HTMLElement {
   static get observedAttributes() {
-    return ["width", "font-size", "src", "lang"];
+    return ["width", "font-size", "src", "lang", "scale", "color-mode"];
   }
 
   constructor() {
@@ -158,6 +160,8 @@ class StruktolabRenderer extends HTMLElement {
     const fontSize = parseInt(this.getAttribute("font-size"), 10) || 14;
     // Use explicit width attribute or measure from container
     const attrWidth = this.getAttribute("width");
+    const scale = parseFloat(this.getAttribute("scale")) || "1";
+    const colorMode = this.getAttribute("color-mode") || "color";
     const width = attrWidth
       ? parseInt(attrWidth, 10)
       : (this.clientWidth || this.getBoundingClientRect().width || 600);
@@ -167,7 +171,7 @@ class StruktolabRenderer extends HTMLElement {
       this._container.removeChild(this._container.firstChild);
     }
 
-    const svg = renderStructogramSVG(this._tree, { width, fontSize });
+    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode });
     this._container.appendChild(svg);
   }
 }

@@ -189,7 +189,7 @@ const STYLES = `
  * <struktolab-editor> — Visual structogram editor with pseudocode sync.
  *
  * Attributes:
- *   scale, font-size, src, lang (same as <struktolab-renderer>)
+ *   scale, font-size, src, lang, color-mode (same as <struktolab-renderer>)
  *
  * Properties:
  *   tree, pseudocode, keywords (same as <struktolab-renderer>)
@@ -206,7 +206,7 @@ const STYLES = `
  */
 class StruktolabEditor extends HTMLElement {
   static get observedAttributes() {
-    return ["scale", "font-size", "src", "lang"];
+    return ["scale", "font-size", "src", "lang", "color-mode"];
   }
 
   constructor() {
