@@ -359,7 +359,10 @@ class StruktolabEditor extends HTMLElement {
         this._fsInput.value = newVal || "14";
       if (name === "scale" && this._scaleInput)
         this._scaleInput.value = newVal || "1";
+      if (name === "color-mode" && this._colorModeSelect)
+        this._colorModeSelect.value = newVal || "color";
       this._render();
+
     }
   }
 
@@ -499,7 +502,7 @@ class StruktolabEditor extends HTMLElement {
     colorModeLabel.textContent = "Color Mode ";
     const colorModeSelect = document.createElement("select");
     colorModeSelect.innerHTML =
-      '<option value="color">Color</option><option value="bw">Black & White</option>';
+      '<option value="color">Color</option><option value="greyscale">Greyscale</option><option value="bw">Black & White</option>';
     colorModeSelect.value = this.getAttribute("color-mode") || "color";
     colorModeSelect.addEventListener("change", () => {
       this.setAttribute("color-mode", colorModeSelect.value);
@@ -507,6 +510,7 @@ class StruktolabEditor extends HTMLElement {
     });
     colorModeLabel.appendChild(colorModeSelect);
     this._toolbar.appendChild(colorModeLabel);
+    this._colorModeSelect = colorModeSelect;
     
 
     // Separator

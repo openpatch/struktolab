@@ -1,38 +1,60 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const COLORS = {
-  color: {
-    TaskNode: "rgb(253, 237, 206)",
-    InputNode: "rgb(253, 237, 206)",
-    OutputNode: "rgb(253, 237, 206)",
-    HeadLoopNode: "rgb(220, 239, 231)",
-    CountLoopNode: "rgb(220, 239, 231)",
-    FootLoopNode: "rgb(220, 239, 231)",
-    BranchNode: "rgb(250, 218, 209)",
-    CaseNode: "rgb(250, 218, 209)",
-    InsertCase: "rgb(250, 218, 209)",
-    TryCatchNode: "rgb(250, 218, 209)",
-    FunctionNode: "rgb(255, 255, 255)",
+  color: (type) => {
+    const colors = {
+      TaskNode: "rgb(253, 237, 206)",
+      InputNode: "rgb(253, 237, 206)",
+      OutputNode: "rgb(253, 237, 206)",
+      HeadLoopNode: "rgb(220, 239, 231)",
+      CountLoopNode: "rgb(220, 239, 231)",
+      FootLoopNode: "rgb(220, 239, 231)",
+      BranchNode: "rgb(250, 218, 209)",
+      CaseNode: "rgb(250, 218, 209)",
+      InsertCase: "rgb(250, 218, 209)",
+      TryCatchNode: "rgb(250, 218, 209)",
+      FunctionNode: "rgb(255, 255, 255)",
+    };
+    return colors[type];
   },
-  bw: {
-    TaskNode: "rgb(250, 250, 250)",
-    InputNode: "rgb(250, 250, 250)",
-    OutputNode: "rgb(250, 250, 250)",
-    HeadLoopNode: "rgb(245, 245, 245)",
-    CountLoopNode: "rgb(245, 245, 245)",
-    FootLoopNode: "rgb(245, 245, 245)",
-    BranchNode: "rgb(240, 240, 240)",
-    CaseNode: "rgb(240, 240, 240)",
-    InsertCase: "rgb(240, 240, 240)",
-    TryCatchNode: "rgb(240, 240, 240)",
-    FunctionNode: "rgb(255, 255, 255)",
+  bw: (type) => {
+    const colors = {
+      TaskNode: "rgb(255, 255, 255)",
+      InputNode: "rgb(255, 255, 255)",
+      OutputNode: "rgb(255, 255, 255)",
+      HeadLoopNode: "rgb(255, 255, 255)",
+      CountLoopNode: "rgb(255, 255, 255)",
+      FootLoopNode: "rgb(255, 255, 255)",
+      BranchNode: "rgb(255, 255, 255)",
+      CaseNode: "rgb(255, 255, 255)",
+      InsertCase: "rgb(255, 255, 255)",
+      TryCatchNode: "rgb(255, 255, 255)",
+      FunctionNode: "rgb(255, 255, 255)",
+    };
+    return colors[type] || "rgb(255, 255, 255)";
+  },
+  greyscale: (type) => {
+    const colors = {
+      TaskNode: "rgb(250, 250, 250)",
+      InputNode: "rgb(250, 250, 250)",
+      OutputNode: "rgb(250, 250, 250)",
+      HeadLoopNode: "rgb(245, 245, 245)",
+      CountLoopNode: "rgb(245, 245, 245)",
+      FootLoopNode: "rgb(245, 245, 245)",
+      BranchNode: "rgb(240, 240, 240)",
+      CaseNode: "rgb(240, 240, 240)",
+      InsertCase: "rgb(240, 240, 240)",
+      TryCatchNode: "rgb(240, 240, 240)",
+      FunctionNode: "rgb(255, 255, 255)",
+    };
+    return colors[type];
   },
 };
 
 let COLOR_MODE = "color";
 
 function getColor(nodeType) {
-  return COLORS[COLOR_MODE][nodeType];
+  return COLORS[COLOR_MODE](nodeType);
 }
 
 const DEFAULT_ROW_HEIGHT = 40;
