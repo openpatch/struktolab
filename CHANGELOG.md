@@ -1,5 +1,11 @@
 # struktolab
 
+## 0.4.0
+
+### Minor Changes
+
+- 0e1c655: Add greyscale and black & white option. Also fixed loading of color mode.
+
 ## 0.3.0
 
 ### Minor Changes
