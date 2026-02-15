@@ -1,5 +1,11 @@
 # struktolab
 
+## 0.4.1
+
+### Patch Changes
+
+- c0c5d9f: Fix scale not used in renderer
+
 ## 0.4.0
 
 ### Minor Changes
