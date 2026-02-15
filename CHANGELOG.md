@@ -1,5 +1,11 @@
 # struktolab
 
+## 0.4.2
+
+### Patch Changes
+
+- 431ec73: Fix editor not accessible
+
 ## 0.4.1
 
 ### Patch Changes

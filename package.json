@@ -1,6 +1,6 @@
 {
   "name": "struktolab",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "A web-based structogram (Nassi-Shneiderman diagram) editor and renderer with code generation",
   "type": "module",
   "main": "dist/editor/struktolab-editor.umd.js",
