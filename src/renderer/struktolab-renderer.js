@@ -159,7 +159,6 @@ class StruktolabRenderer extends HTMLElement {
   _resolveWidth() {
     const scale = parseFloat(this.getAttribute("scale")) || 1;
     const container =
-      this._editorArea.clientWidth ||
       this.clientWidth ||
       this.getBoundingClientRect().width ||
       600;
