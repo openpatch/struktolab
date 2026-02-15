@@ -19,7 +19,7 @@ A free, web-based structogram (Nassi-Shneiderman diagram) editor with automatic 
 Full-featured visual editor with toolbar, pseudocode sync, and import/export.
 
 ```html
-<script src="struktolab-editor.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/struktolab/dist/editor/struktolab-editor.umd.min.js"></script>
 
 <!-- Empty editor -->
 <struktolab-editor font-size="14"></struktolab-editor>
@@ -103,7 +103,7 @@ editor.addEventListener('change', (e) => {
 Read-only SVG renderer for displaying structograms.
 
 ```html
-<script src="struktolab-renderer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/struktolab/dist/renderer/struktolab-renderer.umd.min.js"></script>
 
 <struktolab-renderer font-size="14">
   <script type="text/pseudocode">
