@@ -155,6 +155,17 @@ class StruktolabRenderer extends HTMLElement {
     }
   }
 
+
+  _resolveWidth() {
+    const scale = parseFloat(this.getAttribute("scale")) || 1;
+    const container =
+      this._editorArea.clientWidth ||
+      this.clientWidth ||
+      this.getBoundingClientRect().width ||
+      600;
+    return Math.round(container / scale);
+  }
+
   _render() {
     if (!this._tree) return;
     const fontSize = parseInt(this.getAttribute("font-size"), 10) || 14;
@@ -162,9 +173,7 @@ class StruktolabRenderer extends HTMLElement {
     const attrWidth = this.getAttribute("width");
     const scale = parseFloat(this.getAttribute("scale")) || "1";
     const colorMode = this.getAttribute("color-mode") || "color";
-    const width = attrWidth
-      ? parseInt(attrWidth, 10)
-      : (this.clientWidth || this.getBoundingClientRect().width || 600);
+    const width = this._resolveWidth();
 
     // Clear previous content
     while (this._container.firstChild) {
