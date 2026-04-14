@@ -1,5 +1,12 @@
 # struktolab
 
+## 0.5.0
+
+### Minor Changes
+
+- 8c90fd3: Add resizie via mouse dragging
+- 9471476: Add button for adding and removing cases
+
 ## 0.4.2
 
 ### Patch Changes
