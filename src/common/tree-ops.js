@@ -403,6 +403,54 @@ function _cleanIds(node) {
 }
 
 /**
+ * Add a new case to a CaseNode. Returns a new tree.
+ */
+export function addCase(tree, caseNodeId) {
+  const root = cloneTree(tree);
+  const node = findNode(root, caseNodeId);
+  if (!node || node.type !== "CaseNode") return root;
+
+  const newCase = {
+    id: genId(), type: "InsertCase",
+    text: "Fall " + (node.cases.length + 1),
+    followElement: { id: genId(), type: "InsertNode", followElement: { type: "Placeholder" } },
+  };
+  node.cases.push(newCase);
+
+  // Redistribute column widths equally
+  const numCols = node.cases.length + (node.defaultOn ? 1 : 0);
+  node.columnWidths = _equalWidths(numCols);
+  return root;
+}
+
+/**
+ * Remove a case from a CaseNode by its InsertCase id.
+ * Keeps at least one case. Returns a new tree.
+ */
+export function removeCase(tree, caseId) {
+  const root = cloneTree(tree);
+  const info = findParent(root, caseId);
+  if (!info || info.key !== "cases" || info.index == null) return root;
+
+  const caseNode = info.parent;
+  if (!caseNode || caseNode.type !== "CaseNode") return root;
+  if (caseNode.cases.length <= 1) return root;
+
+  caseNode.cases.splice(info.index, 1);
+
+  const numCols = caseNode.cases.length + (caseNode.defaultOn ? 1 : 0);
+  caseNode.columnWidths = _equalWidths(numCols);
+  return root;
+}
+
+function _equalWidths(n) {
+  const frac = Math.round((1 / n) * 10000) / 10000;
+  const widths = Array(n).fill(frac);
+  widths[n - 1] = Math.round((1 - frac * (n - 1)) * 10000) / 10000;
+  return widths;
+}
+
+/**
  * Collect all editable (non-structural) nodes with their ids and types.
  */
 export function collectEditableNodes(tree) {

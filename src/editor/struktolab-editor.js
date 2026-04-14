@@ -16,6 +16,8 @@ import {
   cloneTree,
   wrapWithInsertNodes,
   stripInsertNodes,
+  addCase,
+  removeCase,
 } from "../common/tree-ops.js";
 
 /* ── Constants ─────────────────────────────────────────────── */
@@ -642,6 +644,7 @@ class StruktolabEditor extends HTMLElement {
       this._addEditTargets(svg, width, fontSize);
       this._addDragTargets(svg, width, fontSize);
       this._addResizeHandles(svg, width, fontSize);
+      this._addCaseButtons(svg, width, fontSize);
     }
 
     // Cancel mode on click outside
@@ -1419,6 +1422,96 @@ class StruktolabEditor extends HTMLElement {
 
   // Move mode uses the same insert target rendering with a different action
   // When mode is "move:ID", re-render shows insert targets that accept the node
+
+  /* ── Case add/delete buttons ────────────────────────────── */
+
+  _addCaseButtons(svg, width, fontSize) {
+    const layout = this._computeLayout(this._tree, 0, 0, width, fontSize, false);
+    const svgNS = "http://www.w3.org/2000/svg";
+    const BTN_SIZE = 18;
+    const BTN_R = 3;
+
+    for (const [id, box] of layout) {
+      if (box.type !== "CaseNode") continue;
+
+      const node = findNode(this._tree, id);
+      if (!node || !node.cases) continue;
+
+      const numCols = node.cases.length + (node.defaultOn ? 1 : 0);
+      const colW = node.columnWidths && node.columnWidths.length === numCols
+        ? node.columnWidths.map(f => box.w * f)
+        : Array(numCols).fill(box.w / numCols);
+
+      const textW = box.w - 16;
+      const condH = this._wrappedTextHeight(node.text || "", textW, fontSize);
+      const slopeH = fontSize * 1.3 + 6;
+      const headerH = condH + slopeH;
+
+      // "+" button: add a new case — placed in top-right of the header
+      const addX = box.x + box.w - BTN_SIZE - 4;
+      const addY = box.y + 3;
+      this._createSvgButton(svg, svgNS, addX, addY, BTN_SIZE, BTN_R, "+",
+        "rgba(1,116,96,0.75)", "rgba(1,116,96,1)", () => {
+          this._tree = this._prepTree(addCase(this._tree, id));
+          this._onTreeChange();
+        });
+
+      // "×" buttons on each case column (only if more than 1 case)
+      if (node.cases.length > 1) {
+        let curX = box.x;
+        for (let i = 0; i < node.cases.length; i++) {
+          const caseId = node.cases[i].id;
+          const delX = curX + colW[i] - BTN_SIZE - 2;
+          const delY = box.y + headerH + 2;
+          this._createSvgButton(svg, svgNS, delX, delY, BTN_SIZE, BTN_R, "×",
+            "rgba(192,57,43,0.65)", "rgba(192,57,43,1)", () => {
+              this._tree = this._prepTree(removeCase(this._tree, caseId));
+              this._onTreeChange();
+            });
+          curX += colW[i];
+        }
+      }
+    }
+  }
+
+  _createSvgButton(svg, svgNS, x, y, size, r, label, fill, hoverFill, onClick) {
+    const g = document.createElementNS(svgNS, "g");
+    g.style.cursor = "pointer";
+
+    const rect = document.createElementNS(svgNS, "rect");
+    rect.setAttribute("x", x);
+    rect.setAttribute("y", y);
+    rect.setAttribute("width", size);
+    rect.setAttribute("height", size);
+    rect.setAttribute("rx", r);
+    rect.setAttribute("ry", r);
+    rect.setAttribute("fill", fill);
+    rect.style.transition = "fill 0.15s";
+
+    const text = document.createElementNS(svgNS, "text");
+    text.setAttribute("x", x + size / 2);
+    text.setAttribute("y", y + size / 2);
+    text.setAttribute("text-anchor", "middle");
+    text.setAttribute("dominant-baseline", "central");
+    text.setAttribute("font-size", "13");
+    text.setAttribute("font-weight", "bold");
+    text.setAttribute("fill", "#fff");
+    text.style.pointerEvents = "none";
+    text.style.userSelect = "none";
+    text.textContent = label;
+
+    g.appendChild(rect);
+    g.appendChild(text);
+
+    g.addEventListener("mouseenter", () => rect.setAttribute("fill", hoverFill));
+    g.addEventListener("mouseleave", () => rect.setAttribute("fill", fill));
+    g.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onClick();
+    });
+
+    svg.appendChild(g);
+  }
 
   /* ── Column resize handles ──────────────────────────────── */
 
