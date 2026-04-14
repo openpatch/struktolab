@@ -390,29 +390,37 @@ function renderNode(node, x, y, width, fontSize, availH) {
       const color = getColor(node.type);
       const rowH = wrappedTextHeight(node.text || "", textW, fontSize);
 
-      const followH = measureHeight(node.followElement, fontSize, width);
-      const naturalH = rowH + followH;
-      const stretchH =
-        availH != null && availH > naturalH ? rowH + (availH - naturalH) : rowH;
-
-      elements.push(bg(x, y, width, stretchH, color));
-      elements.push(ln(x, y, x, y + stretchH));
+      // Fixed-height header — don't stretch the label row
+      elements.push(bg(x, y, width, rowH, color));
+      elements.push(ln(x, y, x, y + rowH));
       elements.push(
         textEl(node.text || "", x + PADDING_X, y, rowH, fontSize, textW),
       );
 
-      const remainH = availH != null ? availH - stretchH : undefined;
+      // Pass remaining available height to content below
+      const remainH = availH != null ? availH - rowH : undefined;
       const follow = renderNode(
         node.followElement,
         x,
-        y + stretchH,
+        y + rowH,
         width,
         fontSize,
         remainH,
       );
+      elements.push(...follow.elements);
+
+      const contentH = rowH + follow.height;
+      const totalH = availH != null && availH > contentH ? availH : contentH;
+
+      // Fill remaining space below content (e.g. empty case with Placeholder)
+      if (totalH > contentH) {
+        elements.push(bg(x, y + contentH, width, totalH - contentH, color));
+        elements.push(ln(x, y + contentH, x, y + totalH));
+      }
+
       return {
-        elements: elements.concat(follow.elements),
-        height: stretchH + follow.height,
+        elements: elements.concat(),
+        height: totalH,
       };
     }
 

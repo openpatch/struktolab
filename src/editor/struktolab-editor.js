@@ -124,6 +124,7 @@ const STYLES = `
 .editor-area svg { cursor: default; }
 .editor-area.mode-insert svg { cursor: crosshair; }
 .editor-area.mode-delete svg { cursor: not-allowed; }
+.editor-area.resizing, .editor-area.resizing svg { cursor: col-resize !important; }
 
 .text-overlay {
   position: absolute;
@@ -640,6 +641,7 @@ class StruktolabEditor extends HTMLElement {
     if (!isInsert && !isDelete && !isMove) {
       this._addEditTargets(svg, width, fontSize);
       this._addDragTargets(svg, width, fontSize);
+      this._addResizeHandles(svg, width, fontSize);
     }
 
     // Cancel mode on click outside
@@ -1417,6 +1419,189 @@ class StruktolabEditor extends HTMLElement {
 
   // Move mode uses the same insert target rendering with a different action
   // When mode is "move:ID", re-render shows insert targets that accept the node
+
+  /* ── Column resize handles ──────────────────────────────── */
+
+  _addResizeHandles(svg, width, fontSize) {
+    const layout = this._computeLayout(this._tree, 0, 0, width, fontSize, false);
+    const svgNS = "http://www.w3.org/2000/svg";
+    const HANDLE_WIDTH = 6;
+
+    for (const [id, box] of layout) {
+      if (box.type !== "BranchNode" && box.type !== "CaseNode") continue;
+
+      const node = findNode(this._tree, id);
+      if (!node) continue;
+
+      // Compute column info and per-divider handle regions
+      let numCols;
+      const dividers = []; // { x, y, h } for each divider
+
+      if (node.type === "BranchNode") {
+        numCols = 2;
+        const textW = box.w - 16;
+        const condH = this._wrappedTextHeight(node.text || "", textW, fontSize);
+        const slopeH = fontSize * 1.3 + 6;
+        // The single divider starts where the diagonals meet (slopeBottom)
+        const slopeBottom = box.y + condH + slopeH;
+        const handleH = box.h - (condH + slopeH);
+
+        const fracs = node.columnWidths && node.columnWidths.length === 2
+          ? [...node.columnWidths]
+          : [0.5, 0.5];
+        const divX = box.x + fracs[0] * box.w;
+        dividers.push({ x: divX, y: slopeBottom, h: handleH });
+      } else {
+        numCols = (node.cases ? node.cases.length : 0) + (node.defaultOn ? 1 : 0);
+        const textW = box.w - 16;
+        const condH = this._wrappedTextHeight(node.text || "", textW, fontSize);
+        const slopeH = fontSize * 1.3 + 6;
+        const headerH = condH + slopeH;
+        const bodyH = box.h - headerH;
+
+        const fracs = node.columnWidths && node.columnWidths.length === numCols
+          ? [...node.columnWidths]
+          : Array(numCols).fill(1 / numCols);
+
+        // Compute cumulative pixel positions (same as SVG renderer)
+        const colXPositions = [0];
+        for (let ci = 0; ci < numCols; ci++) {
+          colXPositions.push(colXPositions[ci] + fracs[ci] * box.w);
+        }
+
+        // Each intermediate divider starts at its own diagY on the diagonal
+        for (let i = 1; i < numCols; i++) {
+          const dividerX = box.x + colXPositions[i];
+          let diagY;
+          if (node.defaultOn) {
+            if (i < numCols - 1) {
+              // Left diagonal: (box.x, y+condH) → (lastDivX, y+headerH)
+              const lastDivXRel = colXPositions[numCols - 1];
+              const frac = colXPositions[i] / lastDivXRel;
+              diagY = box.y + condH + slopeH * frac;
+            } else {
+              // Last divider (between last case and default) starts at headerH
+              diagY = box.y + headerH;
+            }
+          } else {
+            const frac = colXPositions[i] / box.w;
+            diagY = box.y + condH + slopeH * frac;
+          }
+          const handleH = box.y + headerH + bodyH - diagY;
+          dividers.push({ x: dividerX, y: diagY, h: handleH });
+        }
+      }
+
+      if (dividers.length === 0) continue;
+
+      // Current fractions (for drag logic)
+      const fractions = node.columnWidths && node.columnWidths.length === (node.type === "BranchNode" ? 2 : numCols)
+        ? [...node.columnWidths]
+        : Array(node.type === "BranchNode" ? 2 : numCols).fill(1 / (node.type === "BranchNode" ? 2 : numCols));
+
+      for (let i = 0; i < dividers.length; i++) {
+        const div = dividers[i];
+
+        const handle = document.createElementNS(svgNS, "rect");
+        handle.setAttribute("x", div.x - HANDLE_WIDTH / 2);
+        handle.setAttribute("y", div.y);
+        handle.setAttribute("width", HANDLE_WIDTH);
+        handle.setAttribute("height", Math.max(div.h, 20));
+        handle.setAttribute("fill", "transparent");
+        handle.style.cursor = "col-resize";
+
+        const dividerIndex = i;
+        handle.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this._startColumnResize(svg, node, id, dividerIndex, numCols, fractions, box);
+        });
+
+        svg.appendChild(handle);
+      }
+    }
+  }
+
+  _wrappedTextHeight(str, maxWidth, fontSize) {
+    const lines = this._wrapText(str || "", maxWidth, fontSize);
+    const lineH = fontSize * 1.3;
+    const PADDING_Y = 6;
+    return Math.max(40, lines.length * lineH + PADDING_Y * 2);
+  }
+
+  _startColumnResize(svg, node, nodeId, dividerIndex, numCols, fractions, box) {
+    this._editorArea.classList.add("resizing");
+
+    const svgEl = svg;
+    const svgRect = svgEl.getBoundingClientRect();
+    const viewBox = svgEl.viewBox.baseVal;
+    const scaleX = svgRect.width / viewBox.width;
+
+    // Convert SVG box.x to screen space for reference
+    const boxLeftScreen = (box.x - viewBox.x) * scaleX + svgRect.left;
+    const boxWidth = box.w * scaleX;
+
+    const currentFractions = [...fractions];
+    const MIN_FRACTION = 0.1;
+    let rafId = null;
+
+    const onMouseMove = (e) => {
+      const mouseX = e.clientX;
+      const relX = mouseX - boxLeftScreen;
+      const rawFraction = relX / boxWidth;
+
+      let sumBefore = 0;
+      for (let i = 0; i < dividerIndex; i++) sumBefore += currentFractions[i];
+
+      let sumAfter = 0;
+      for (let i = dividerIndex + 2; i < numCols; i++) sumAfter += currentFractions[i];
+
+      const available = 1 - sumBefore - sumAfter;
+      let leftFrac = rawFraction - sumBefore;
+      let rightFrac = available - leftFrac;
+
+      if (leftFrac < MIN_FRACTION) {
+        leftFrac = MIN_FRACTION;
+        rightFrac = available - leftFrac;
+      }
+      if (rightFrac < MIN_FRACTION) {
+        rightFrac = MIN_FRACTION;
+        leftFrac = available - rightFrac;
+      }
+
+      currentFractions[dividerIndex] = Math.round(leftFrac * 100) / 100;
+      currentFractions[dividerIndex + 1] = Math.round(rightFrac * 100) / 100;
+
+      const sum = currentFractions.reduce((a, b) => a + b, 0);
+      if (Math.abs(sum - 1) > 0.001) {
+        currentFractions[numCols - 1] += 1 - sum;
+        currentFractions[numCols - 1] = Math.round(currentFractions[numCols - 1] * 100) / 100;
+      }
+
+      // Live preview: update tree and re-render (throttled via rAF)
+      if (rafId == null) {
+        rafId = requestAnimationFrame(() => {
+          rafId = null;
+          node.columnWidths = [...currentFractions];
+          this._render();
+          this._editorArea.classList.add("resizing");
+        });
+      }
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      if (rafId != null) cancelAnimationFrame(rafId);
+      this._editorArea.classList.remove("resizing");
+
+      node.columnWidths = [...currentFractions];
+      this._onTreeChange();
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }
 
   /* ── Pseudocode sync ────────────────────────────────────── */
 
