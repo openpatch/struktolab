@@ -1,0 +1,63 @@
+{
+  "name": "struktolab",
+  "version": "0.4.2",
+  "description": "A web-based structogram (Nassi-Shneiderman diagram) editor and renderer with code generation",
+  "type": "module",
+  "main": "dist/editor/struktolab-editor.umd.js",
+  "module": "dist/editor/struktolab-editor.es.js",
+  "exports": {
+    ".": {
+      "import": "./dist/editor/struktolab-editor.es.js",
+      "require": "./dist/editor/struktolab-editor.umd.js"
+    },
+    "./renderer": {
+      "import": "./dist/renderer/struktolab-renderer.es.js",
+      "require": "./dist/renderer/struktolab-renderer.umd.js"
+    },
+    "./editor": {
+      "import": "./dist/editor/struktolab-editor.es.js",
+      "require": "./dist/editor/struktolab-editor.umd.js"
+    },
+    "./core": {
+      "import": "./dist/core/struktolab-core.es.js",
+      "require": "./dist/core/struktolab-core.umd.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "license.md"
+  ],
+  "scripts": {
+    "dev": "BUILD_TARGET=editor vite build --watch",
+    "build": "BUILD_TARGET=core vite build && BUILD_TARGET=renderer vite build && BUILD_TARGET=editor vite build",
+    "build:core": "BUILD_TARGET=core vite build",
+    "build:renderer": "BUILD_TARGET=renderer vite build",
+    "build:editor": "BUILD_TARGET=editor vite build",
+    "version": "pnpm build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openpatch/struktolab.git",
+    "directory": "packages/struktolab"
+  },
+  "homepage": "https://struktolab.openpatch.org",
+  "bugs": {
+    "url": "https://github.com/openpatch/struktolab/issues"
+  },
+  "keywords": [
+    "structogram",
+    "nassi-shneiderman",
+    "diagram",
+    "editor",
+    "web-component"
+  ],
+  "author": "OpenPatch",
+  "contributors": [
+    "Mike Barkmin"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^7.3.1"
+  }
+}

@@ -1,4 +1,4 @@
-import "../editor/index.js";
+import "struktolab/editor";
 import { loadFromHash, saveToHash } from "./hash.js";
 
 const editor = document.getElementById("editor");

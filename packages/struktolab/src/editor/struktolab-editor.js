@@ -18,14 +18,33 @@ import {
   stripInsertNodes,
   addCase,
   removeCase,
+  collectMovedIds,
 } from "../common/tree-ops.js";
 
 /* ── Constants ─────────────────────────────────────────────── */
 
-const INSERT_COLOR = "rgba(1, 116, 96, 0.2)";
-const INSERT_HOVER_COLOR = "rgba(1, 116, 96, 0.45)";
+const INSERT_COLOR = "rgba(1, 116, 96, 0.28)";
+/** The seam marker has to read as a control, so it is solid rather than a tint. */
+const INSERT_LINE_COLOR = "rgb(1, 116, 96)";
 const INSERT_HEIGHT = 20;
-const DELETE_HOVER_COLOR = "rgba(192, 57, 43, 0.25)";
+
+/** Deep enough to undo a session's worth of mistakes, bounded so it can't grow forever. */
+const HISTORY_LIMIT = 100;
+
+/** How each node type is named to a screen reader. */
+const NODE_LABELS = {
+  TaskNode: "Task",
+  InputNode: "Input",
+  OutputNode: "Output",
+  BranchNode: "If/Else",
+  CaseNode: "Switch",
+  InsertCase: "Case",
+  HeadLoopNode: "While loop",
+  FootLoopNode: "Do-While loop",
+  CountLoopNode: "For loop",
+  FunctionNode: "Function",
+  TryCatchNode: "Try/Catch",
+};
 
 /* ── Toolbar definitions ───────────────────────────────────── */
 
@@ -49,6 +68,8 @@ const STYLES = `
   display: block;
   width: 100%;
   font-family: sans-serif;
+  /* The insert menu hangs off the host, not off the clipped editor area. */
+  position: relative;
   --toolbar-bg: #f5f5f5;
   --toolbar-border: #d6d6d6;
   --btn-bg: #fff;
@@ -60,7 +81,7 @@ const STYLES = `
 .toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 4px 10px;
   padding: 6px 8px;
   background: var(--toolbar-bg);
   border: 1px solid var(--toolbar-border);
@@ -68,7 +89,18 @@ const STYLES = `
   align-items: center;
 }
 
-.toolbar button {
+/* Each group is one job: history, view settings, files. Inserting and deleting
+   are not here at all — they belong to the nodes themselves. */
+.toolbar .group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  position: relative;
+}
+.toolbar .group.file { margin-left: auto; }
+
+button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -78,32 +110,50 @@ const STYLES = `
   background: var(--btn-bg);
   cursor: pointer;
   font-size: 13px;
+  line-height: 1.4;
   font-family: inherit;
   white-space: nowrap;
   user-select: none;
+  color: inherit;
 }
-.toolbar button:hover { background: var(--btn-hover); }
-.toolbar button.active { background: var(--btn-active); border-color: #017460; }
-.toolbar button.danger { color: var(--danger); border-color: var(--danger); }
-.toolbar button.danger:hover { background: #fde; }
-.toolbar button.danger.active { background: #fcc; }
+
+/* Every icon gets the same box.
+   Left to itself each glyph contributes its own line box — ⚙ is 16px tall, 💾
+   17, ↶ 20, 🖼 22 — so the buttons came out five different heights, with PNG
+   the odd one out. A fixed box means the glyph no longer sets the height. */
+button .icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  line-height: 1;
+}
+button:hover:not(:disabled) { background: var(--btn-hover); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.active { background: var(--btn-active); border-color: #017460; }
+button.danger { color: var(--danger); border-color: var(--danger); }
+button.danger:hover:not(:disabled) { background: #fde; }
+button.danger.active { background: #fcc; }
+button:focus-visible { outline: 2px solid #017460; outline-offset: 1px; }
 
 .toolbar .sep {
   width: 1px;
   height: 24px;
   background: var(--toolbar-border);
-  margin: 0 4px;
 }
 
-.toolbar select, .toolbar input[type="number"] {
+select, input[type="number"] {
   padding: 3px 6px;
   border: 1px solid var(--toolbar-border);
   border-radius: 3px;
   background: var(--btn-bg);
   font-size: 13px;
   font-family: inherit;
+  color: inherit;
 }
-.toolbar label {
+label {
   font-size: 12px;
   color: #3c3c3c;
   display: inline-flex;
@@ -111,8 +161,30 @@ const STYLES = `
   gap: 4px;
   white-space: nowrap;
 }
-.toolbar input[type="number"] {
-  width: 52px;
+input[type="number"] { width: 60px; }
+
+/* View settings live behind one button instead of spending four slots. */
+.popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 8px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--btn-bg);
+  border: 1px solid var(--toolbar-border);
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+}
+.popover label { justify-content: flex-end; }
+
+/* Narrow viewports: the icons carry the meaning, the titles carry the words. */
+@media (max-width: 760px) {
+  .toolbar button .label { display: none; }
+  .toolbar button { padding: 4px 8px; }
 }
 
 .editor-area {
@@ -124,9 +196,57 @@ const STYLES = `
 }
 
 .editor-area svg { cursor: default; }
-.editor-area.mode-insert svg { cursor: crosshair; }
-.editor-area.mode-delete svg { cursor: not-allowed; }
+.editor-area.mode-move svg { cursor: crosshair; }
 .editor-area.resizing, .editor-area.resizing svg { cursor: col-resize !important; }
+.editor-area:focus { outline: none; }
+
+/* Dragging a divider or a node must not also pan the page on a touch screen. */
+.editor-area svg [data-grab] { touch-action: none; }
+
+/* The keyboard needs to see where it is; SVG outlines are unreliable, so the
+   focus ring is drawn as a stroke on the node's own hit rect. */
+.editor-area svg [tabindex]:focus { outline: none; }
+.editor-area svg [tabindex]:focus-visible {
+  stroke: #017460;
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+
+/* What is being carried, following the pointer. */
+.drag-ghost {
+  position: fixed;
+  z-index: 40;
+  display: none;
+  padding: 4px 10px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #fff;
+  background: rgb(1, 116, 96);
+  border-radius: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+/* The insert menu, opened from a slot or from a focused node. */
+.type-menu {
+  position: absolute;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px;
+  background: var(--btn-bg);
+  border: 1px solid var(--toolbar-border);
+  border-radius: 4px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  width: max-content;
+  max-width: min(280px, 100%);
+}
+.type-menu button { justify-content: flex-start; width: 100%; }
+.type-menu .label { display: inline !important; }
 
 .text-overlay {
   position: absolute;
@@ -193,6 +313,8 @@ const STYLES = `
  *
  * Attributes:
  *   scale, font-size, src, lang, color-mode (same as <struktolab-renderer>)
+ *   embedded — the host owns the file. Hides the Save/Load buttons and turns the
+ *              PNG/SVG buttons into an "export-image" event instead of a download.
  *
  * Properties:
  *   tree, pseudocode, keywords (same as <struktolab-renderer>)
@@ -205,11 +327,12 @@ const STYLES = `
  *   change(tree)         — set a new tree programmatically
  *
  * Events:
- *   "change" — fired when the tree changes (detail: { tree })
+ *   "change"       — fired when the tree changes (detail: { tree })
+ *   "export-image" — embedded only: an image is ready (detail: { format, blob })
  */
 class StruktolabEditor extends HTMLElement {
   static get observedAttributes() {
-    return ["scale", "font-size", "src", "lang", "color-mode"];
+    return ["scale", "font-size", "src", "lang", "color-mode", "embedded"];
   }
 
   constructor() {
@@ -219,6 +342,18 @@ class StruktolabEditor extends HTMLElement {
     this._mode = null; // null | "insert:TYPE" | "delete" | "move:ID"
     this._syncing = false; // guard against circular updates
     this._debounceTimer = null;
+
+    // Undo history: snapshots of the tree, oldest first.
+    this._undoStack = [];
+    this._redoStack = [];
+
+    /** The node the keyboard is on, so a re-render can put focus back. */
+    this._focusedId = null;
+    this._typeMenu = null;
+
+    // Fingers need bigger targets than a mouse pointer does.
+    this._coarsePointer =
+      typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
     this._shadow = this.attachShadow({ mode: "open" });
 
@@ -236,6 +371,11 @@ class StruktolabEditor extends HTMLElement {
     // Editor area
     this._editorArea = document.createElement("div");
     this._editorArea.className = "editor-area";
+    this._editorArea.setAttribute("role", "application");
+    this._editorArea.setAttribute(
+      "aria-label",
+      "Structogram editor. Arrow keys move between nodes, Enter edits, Plus inserts, Delete removes.",
+    );
     this._shadow.appendChild(this._editorArea);
 
     // Pseudocode area
@@ -296,9 +436,63 @@ class StruktolabEditor extends HTMLElement {
         ta.dispatchEvent(new Event("input"));
       }
     });
+
+    this._shadow.addEventListener("keydown", (e) => this._onShortcut(e));
+    // A click anywhere that is not the popover or the menu dismisses them.
+    this._shadow.addEventListener("pointerdown", (e) => {
+      const path = e.composedPath();
+      if (this._typeMenu && !path.includes(this._typeMenu)) this._hideTypeMenu();
+      if (
+        this._viewPopover.style.display !== "none" &&
+        !path.includes(this._viewPopover) &&
+        !path.includes(this._viewBtn)
+      ) {
+        this._toggleViewPopover(false);
+      }
+    });
+  }
+
+  /**
+   * Shortcuts for the diagram.
+   *
+   * The pseudocode textarea and the node text editor keep their own Ctrl+Z —
+   * text undo there is what anyone would expect, and it is not ours to take.
+   */
+  _onShortcut(e) {
+    const target = e.composedPath()[0];
+    const inTextField =
+      target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement;
+
+    if (e.key === "Escape") {
+      if (this._typeMenu) {
+        this._hideTypeMenu(true);
+        e.preventDefault();
+      } else if (this._viewPopover.style.display !== "none") {
+        this._toggleViewPopover(false);
+        this._viewBtn.focus();
+        e.preventDefault();
+      } else if (this._mode) {
+        this._setMode(null);
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (inTextField || this._embedded) return;
+
+    const key = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && key === "z") {
+      e.preventDefault();
+      if (e.shiftKey) this.redo();
+      else this.undo();
+    } else if ((e.ctrlKey || e.metaKey) && key === "y") {
+      e.preventDefault();
+      this.redo();
+    }
   }
 
   connectedCallback() {
+    this._applyEmbedded();
     requestAnimationFrame(() => this._initialize());
   }
 
@@ -355,6 +549,8 @@ class StruktolabEditor extends HTMLElement {
   attributeChangedCallback(name, oldVal, newVal) {
     if (name === "src" && newVal && newVal !== oldVal) {
       this._fetchTree(newVal);
+    } else if (name === "embedded") {
+      this._applyEmbedded();
     } else {
       if (name === "lang" && this._langSelect)
         this._langSelect.value = newVal || "de";
@@ -371,6 +567,7 @@ class StruktolabEditor extends HTMLElement {
 
   set tree(t) {
     this._tree = this._prepTree(t);
+    this._resetHistory();
     this._render();
     this._syncTreeToPseudocode();
   }
@@ -387,6 +584,7 @@ class StruktolabEditor extends HTMLElement {
 
   set pseudocode(code) {
     this._tree = this._prepTree(parsePseudocode(code, this._getKeywords()));
+    this._resetHistory();
     this._render();
     this._syncTreeToPseudocode();
   }
@@ -409,47 +607,98 @@ class StruktolabEditor extends HTMLElement {
 
   /* ── Toolbar ────────────────────────────────────────────── */
 
-  _buildToolbar() {
-    for (const item of TOOLBAR_ITEMS) {
-      const btn = document.createElement("button");
-      btn.textContent = item.icon + " " + item.label;
-      btn.dataset.type = item.type;
-      btn.title = `Insert ${item.label}`;
-      btn.draggable = true;
-      btn.addEventListener("click", () => this._toggleInsertMode(item.type));
-      btn.addEventListener("dragstart", (e) => {
-        e.dataTransfer.setData("text/plain", item.type);
-        e.dataTransfer.effectAllowed = "copy";
-        this._setMode("insert:" + item.type);
-      });
-      btn.addEventListener("dragend", () => {
-        if (this._mode && this._mode.startsWith("insert:")) this._setMode(null);
-      });
-      this._toolbar.appendChild(btn);
-    }
+  /** A toolbar button whose label collapses away on a narrow toolbar. */
+  _button(icon, label, title, onClick, className) {
+    const btn = document.createElement("button");
+    const iconEl = document.createElement("span");
+    iconEl.className = "icon";
+    iconEl.setAttribute("aria-hidden", "true");
+    iconEl.textContent = icon;
+    const labelEl = document.createElement("span");
+    labelEl.className = "label";
+    labelEl.textContent = label;
+    btn.append(iconEl, labelEl);
+    btn.title = title;
+    btn.setAttribute("aria-label", label);
+    if (className) btn.className = className;
+    if (onClick) btn.addEventListener("click", onClick);
+    return btn;
+  }
 
-    // Separator
+  _group(name) {
+    const g = document.createElement("div");
+    g.className = "group " + name;
+    this._toolbar.appendChild(g);
+    return g;
+  }
+
+  _separator() {
     const sep = document.createElement("span");
     sep.className = "sep";
     this._toolbar.appendChild(sep);
+    return sep;
+  }
 
-    // Delete button
-    const delBtn = document.createElement("button");
-    delBtn.textContent = "🗑 Delete";
-    delBtn.className = "danger";
-    delBtn.title = "Delete mode — click a node to remove it";
-    delBtn.addEventListener("click", () => this._toggleDeleteMode());
-    this._toolbar.appendChild(delBtn);
-    this._deleteBtn = delBtn;
+  _buildToolbar() {
+    /* History */
+    const history = this._group("history");
+    this._undoBtn = this._button("↶", "Undo", "Undo (Ctrl+Z)", () => this.undo());
+    this._redoBtn = this._button("↷", "Redo", "Redo (Ctrl+Shift+Z)", () => this.redo());
+    history.append(this._undoBtn, this._redoBtn);
+    this._historyGroup = history;
+    this._historySep = this._separator();
 
-    // Separator
-    const sep2 = document.createElement("span");
-    sep2.className = "sep";
-    this._toolbar.appendChild(sep2);
+    /* View settings, behind one button */
+    const view = this._group("view");
+    const viewBtn = this._button("⚙", "View", "Language, size, scale and colours");
+    viewBtn.setAttribute("aria-haspopup", "true");
+    viewBtn.setAttribute("aria-expanded", "false");
+    viewBtn.addEventListener("click", () => this._toggleViewPopover());
+    view.appendChild(viewBtn);
+    this._viewBtn = viewBtn;
+    this._viewPopover = this._buildViewPopover();
+    view.appendChild(this._viewPopover);
 
-    // Language select
-    const langLabel = document.createElement("label");
-    langLabel.textContent = "Lang ";
+    /* Files and export */
+    const file = this._group("file");
+
+    this._saveBtn = this._button("💾", "Save", "Save structogram as JSON", () =>
+      this._downloadJSON(),
+    );
+    this._loadBtn = this._button("📂", "Load", "Load structogram from JSON file", () =>
+      this._triggerLoadJSON(),
+    );
+    file.append(this._saveBtn, this._loadBtn);
+
+    this._fileInput = document.createElement("input");
+    this._fileInput.type = "file";
+    this._fileInput.accept = ".json,application/json";
+    this._fileInput.style.display = "none";
+    this._fileInput.addEventListener("change", (e) => this._handleFileLoad(e));
+    file.appendChild(this._fileInput);
+
+    file.append(
+      this._button("🖼", "PNG", "Export as PNG image", () => this._downloadImage("png")),
+      this._button("📐", "SVG", "Export as SVG image", () => this._downloadImage("svg")),
+    );
+
+    this._updateHistoryButtons();
+  }
+
+  _buildViewPopover() {
+    const pop = document.createElement("div");
+    pop.className = "popover";
+    pop.style.display = "none";
+
+    const row = (text, control) => {
+      const label = document.createElement("label");
+      label.textContent = text;
+      const id = "v" + Math.random().toString(36).slice(2, 8);
+      control.id = id;
+      label.htmlFor = id;
+      pop.append(label, control);
+    };
+
     const langSelect = document.createElement("select");
     langSelect.innerHTML =
       '<option value="de">Deutsch</option><option value="en">English</option>';
@@ -459,13 +708,9 @@ class StruktolabEditor extends HTMLElement {
       this._keywords = null;
       this._onTreeChange();
     });
-    langLabel.appendChild(langSelect);
-    this._toolbar.appendChild(langLabel);
+    row("Language", langSelect);
     this._langSelect = langSelect;
 
-    // Font-size input
-    const fsLabel = document.createElement("label");
-    fsLabel.textContent = "Size ";
     const fsInput = document.createElement("input");
     fsInput.type = "number";
     fsInput.min = "8";
@@ -475,13 +720,9 @@ class StruktolabEditor extends HTMLElement {
       this.setAttribute("font-size", fsInput.value);
       this._onTreeChange();
     });
-    fsLabel.appendChild(fsInput);
-    this._toolbar.appendChild(fsLabel);
+    row("Font size", fsInput);
     this._fsInput = fsInput;
 
-    // Scale input
-    const scaleLabel = document.createElement("label");
-    scaleLabel.textContent = "Scale ";
     const scaleInput = document.createElement("input");
     scaleInput.type = "number";
     scaleInput.min = "0.25";
@@ -497,12 +738,9 @@ class StruktolabEditor extends HTMLElement {
       }
       this._onTreeChange();
     });
-    scaleLabel.appendChild(scaleInput);
-    this._toolbar.appendChild(scaleLabel);
+    row("Scale", scaleInput);
     this._scaleInput = scaleInput;
 
-    const colorModeLabel = document.createElement("label");
-    colorModeLabel.textContent = "Color Mode ";
     const colorModeSelect = document.createElement("select");
     colorModeSelect.innerHTML =
       '<option value="color">Color</option><option value="greyscale">Greyscale</option><option value="bw">Black & White</option>';
@@ -511,78 +749,128 @@ class StruktolabEditor extends HTMLElement {
       this.setAttribute("color-mode", colorModeSelect.value);
       this._onTreeChange();
     });
-    colorModeLabel.appendChild(colorModeSelect);
-    this._toolbar.appendChild(colorModeLabel);
+    row("Colours", colorModeSelect);
     this._colorModeSelect = colorModeSelect;
-    
 
-    // Separator
-    const sep3 = document.createElement("span");
-    sep3.className = "sep";
-    this._toolbar.appendChild(sep3);
-
-    // Save JSON
-    const saveBtn = document.createElement("button");
-    saveBtn.textContent = "💾 Save";
-    saveBtn.title = "Save structogram as JSON";
-    saveBtn.addEventListener("click", () => this._downloadJSON());
-    this._toolbar.appendChild(saveBtn);
-
-    // Load JSON
-    const loadBtn = document.createElement("button");
-    loadBtn.textContent = "📂 Load";
-    loadBtn.title = "Load structogram from JSON file";
-    loadBtn.addEventListener("click", () => this._triggerLoadJSON());
-    this._toolbar.appendChild(loadBtn);
-
-    // Hidden file input for load
-    this._fileInput = document.createElement("input");
-    this._fileInput.type = "file";
-    this._fileInput.accept = ".json,application/json";
-    this._fileInput.style.display = "none";
-    this._fileInput.addEventListener("change", (e) => this._handleFileLoad(e));
-    this._toolbar.appendChild(this._fileInput);
-
-    // Export PNG
-    const pngBtn = document.createElement("button");
-    pngBtn.textContent = "🖼 PNG";
-    pngBtn.title = "Export as PNG image";
-    pngBtn.addEventListener("click", () => this._downloadImage("png"));
-    this._toolbar.appendChild(pngBtn);
-
-    // Export SVG
-    const svgBtn = document.createElement("button");
-    svgBtn.textContent = "📐 SVG";
-    svgBtn.title = "Export as SVG image";
-    svgBtn.addEventListener("click", () => this._downloadImage("svg"));
-    this._toolbar.appendChild(svgBtn);
+    return pop;
   }
 
-  _toggleInsertMode(type) {
-    const modeStr = "insert:" + type;
-    this._setMode(this._mode === modeStr ? null : modeStr);
+  _toggleViewPopover(force) {
+    const open = force ?? this._viewPopover.style.display === "none";
+    this._viewPopover.style.display = open ? "grid" : "none";
+    this._viewBtn.classList.toggle("active", open);
+    this._viewBtn.setAttribute("aria-expanded", String(open));
   }
 
-  _toggleDeleteMode() {
-    this._setMode(this._mode === "delete" ? null : "delete");
+  /**
+   * Save/Load move a file around, which is the host's job when embedded — in
+   * VS Code the document is the file and Ctrl+S owns saving it. Undo goes the
+   * same way: the host has its own stack over the document, and two stacks
+   * fighting over Ctrl+Z is worse than either alone.
+   *
+   * This runs from connectedCallback rather than _buildToolbar, because the
+   * toolbar is built in the constructor, before attributes set with
+   * createElement() + setAttribute() exist.
+   */
+  _applyEmbedded() {
+    if (!this._saveBtn) return;
+    const hidden = this.hasAttribute("embedded") ? "none" : "";
+    this._saveBtn.style.display = hidden;
+    this._loadBtn.style.display = hidden;
+    this._historyGroup.style.display = hidden;
+    this._historySep.style.display = hidden;
   }
 
+  /** True when the host, not this component, owns files and undo. */
+  get _embedded() {
+    return this.hasAttribute("embedded");
+  }
+
+  /* ── Undo history ───────────────────────────────────────── */
+
+  /**
+   * Replace the tree, remembering the one being replaced.
+   *
+   * Every structural edit goes through here, which is the whole of the undo
+   * implementation: the trees are already deep-cloned on each operation, so a
+   * snapshot costs one more clone.
+   */
+  _commit(newTree) {
+    this._pushHistory();
+    this._tree = this._prepTree(newTree);
+    this._onTreeChange();
+  }
+
+  /** Remember the current tree as an undo step. */
+  _pushHistory(snapshot) {
+    const state = snapshot ?? this._tree;
+    if (!state) return;
+    this._undoStack.push(cloneTree(state));
+    if (this._undoStack.length > HISTORY_LIMIT) this._undoStack.shift();
+    this._redoStack.length = 0;
+    this._updateHistoryButtons();
+  }
+
+  get canUndo() {
+    return this._undoStack.length > 0;
+  }
+  get canRedo() {
+    return this._redoStack.length > 0;
+  }
+
+  /** Step back one edit. */
+  undo() {
+    if (!this._undoStack.length) return false;
+    this._redoStack.push(cloneTree(this._tree));
+    this._tree = this._undoStack.pop();
+    this._afterHistoryMove();
+    return true;
+  }
+
+  /** Step forward again. */
+  redo() {
+    if (!this._redoStack.length) return false;
+    this._undoStack.push(cloneTree(this._tree));
+    this._tree = this._redoStack.pop();
+    this._afterHistoryMove();
+    return true;
+  }
+
+  _afterHistoryMove() {
+    this._hideEditOverlay();
+    this._hideTypeMenu();
+    this._setMode(null); // _setMode re-renders
+    this._syncTreeToPseudocode();
+    this._updateHistoryButtons();
+    this._emitChange();
+  }
+
+  _updateHistoryButtons() {
+    if (!this._undoBtn) return;
+    this._undoBtn.disabled = !this.canUndo;
+    this._redoBtn.disabled = !this.canRedo;
+  }
+
+  /**
+   * Modes left after the palette went away.
+   *
+   * Inserting and deleting are node-local now — the seam menu and the node's
+   * own delete button — so the only mode remaining is "move:ID", armed by
+   * picking up a drag handle and ended by dropping on a slot.
+   */
   _setMode(mode) {
     this._mode = mode;
-    // Update toolbar button states
-    for (const btn of this._toolbar.querySelectorAll("button[data-type]")) {
-      btn.classList.toggle("active", mode === "insert:" + btn.dataset.type);
+    this._editorArea.classList.toggle("mode-move", Boolean(mode));
+    if (!mode) {
+      // Putting the node down — drop the slot bookkeeping, and the ghost with
+      // it if this was an Escape in the middle of a drag.
+      this._moveSlots = [];
+      this._activeSlot = null;
+      if (this._drag) {
+        this._drag.ghost.remove();
+        this._drag = null;
+      }
     }
-    this._deleteBtn.classList.toggle("active", mode === "delete");
-
-    // Update editor area class
-    this._editorArea.classList.remove("mode-insert", "mode-delete");
-    if (mode && mode.startsWith("insert:")) {
-      this._editorArea.classList.add("mode-insert");
-    } else if (mode === "delete") {
-      this._editorArea.classList.add("mode-delete");
-    }
-
     this._render();
   }
 
@@ -600,57 +888,75 @@ class StruktolabEditor extends HTMLElement {
 
   _render() {
     if (!this._tree) return;
+    // The menu points at a slot in the SVG about to be replaced.
+    this._hideTypeMenu();
     const fontSize = parseInt(this.getAttribute("font-size"), 10) || 14;
     const width = this._resolveWidth();
     const colorMode = this.getAttribute("color-mode");
 
-    // Remove old SVG (keep overlay)
+    // Remove old SVG (keep overlay). If the keyboard was on a node, it has to
+    // land on the same node again once the new SVG is in — a re-render is not
+    // a reason to lose your place.
     const oldSvg = this._editorArea.querySelector("svg");
+    const hadFocus = oldSvg ? oldSvg.contains(this._shadow.activeElement) : false;
     if (oldSvg) oldSvg.remove();
 
-    // Only allocate space for InsertNodes when in insert or move mode
-    const showTargets =
-      (this._mode && this._mode.startsWith("insert:")) ||
-      (this._mode && this._mode.startsWith("move:"));
-    setInsertNodeHeight(showTargets ? INSERT_HEIGHT : 0);
-    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode });
+    // Slots never take up space of their own. Reserving room for them the
+    // moment a move starts used to grow the diagram and slide the node out
+    // from under the pointer, which is the one thing a drag must not do.
     setInsertNodeHeight(0);
+    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode });
+
+    svg.setAttribute("role", "group");
+    svg.setAttribute("aria-label", "Structogram");
 
     // Add interactive overlays
     this._addInteractivity(svg, width, fontSize);
 
     this._editorArea.insertBefore(svg, this._overlay);
+
+    if (hadFocus && this._focusedId) {
+      const rect = svg.querySelector(`[data-node-id="${this._focusedId}"]`);
+      if (rect) rect.focus({ preventScroll: true });
+    }
+
+    // Picked up from the keyboard: there is no pointer to aim with, so the
+    // focus goes to the first slot and the arrows do the aiming. This has to
+    // happen here rather than while building the slots, because until the SVG
+    // is in the document nothing inside it can take focus.
+    if (this._keyboardMove) {
+      this._keyboardMove = false;
+      this._moveSlots?.[0]?.element.focus({ preventScroll: true });
+    }
   }
 
   _addInteractivity(svg, width, fontSize) {
-    const isInsert = this._mode && this._mode.startsWith("insert:");
-    const isDelete = this._mode === "delete";
     const isMove = this._mode && this._mode.startsWith("move:");
 
-    if (isInsert || isMove) {
-      this._addInsertTargets(
-        svg,
-        width,
-        fontSize,
-        isMove ? this._mode.replace("move:", "") : null,
-      );
-    }
-    if (isDelete) {
-      this._addDeleteTargets(svg, width, fontSize);
-    }
-
-    // Click-to-edit on text nodes
-    if (!isInsert && !isDelete && !isMove) {
-      this._addEditTargets(svg, width, fontSize);
-      this._addDragTargets(svg, width, fontSize);
-      this._addResizeHandles(svg, width, fontSize);
-      this._addCaseButtons(svg, width, fontSize);
-    }
-
-    // Cancel mode on click outside
     if (isMove) {
-      svg.addEventListener("click", () => this._setMode(null));
+      this._addMoveTargets(svg, width, fontSize, this._mode.replace("move:", ""));
+      // Pressing anywhere that is not a slot puts the node back down.
+      //
+      // This listens for pointerdown, not click: arming the move re-renders,
+      // which removes the grip mid-gesture, and the click that gesture goes on
+      // to produce is retargeted onto this very SVG — cancelling the move the
+      // instant it began. A pointerdown can only belong to a later gesture.
+      svg.addEventListener("pointerdown", (e) => {
+        const onSlot = (this._moveSlots || []).some((slot) =>
+          e.composedPath().includes(slot.element),
+        );
+        if (!onSlot) this._setMode(null);
+      });
+      return;
     }
+
+    // Order is hit-testing order: the node layer covers whole nodes and goes in
+    // first, then the thin insert strips over the seams between them, then the
+    // small handles and buttons last so they always win the click.
+    this._addNodeTargets(svg, width, fontSize);
+    this._addQuickInsertTargets(svg, width, fontSize);
+    this._addResizeHandles(svg, width, fontSize);
+    this._addCaseButtons(svg, width, fontSize);
   }
 
   /**
@@ -1058,82 +1364,184 @@ class StruktolabEditor extends HTMLElement {
 
   /* ── Insert targets ─────────────────────────────────────── */
 
-  _addInsertTargets(svg, width, fontSize, moveNodeId) {
-    const layout = this._computeLayout(this._tree, 0, 0, width, fontSize, true);
-    const svgNS = "http://www.w3.org/2000/svg";
 
-    // Sort by area descending so narrower column targets are appended last (on top)
-    const entries = [...layout.entries()]
-      .filter(([, box]) => box.type === "InsertNode")
-      .sort(([, a], [, b]) => b.w * b.h - a.w * a.h);
+  /* ── Quick insert (no mode required) ────────────────────── */
+
+  /**
+   * A thin strip on every seam between two nodes.
+   *
+   * Picking a type from the toolbar first and then aiming at a slot works, but
+   * it makes the slots invisible until you have already committed to a type.
+   * These strips run the other way round: point at the place, then choose.
+   */
+  _addQuickInsertTargets(svg, width, fontSize) {
+    const layout = this._computeLayout(this._tree, 0, 0, width, fontSize, false);
+    const svgNS = "http://www.w3.org/2000/svg";
+    const BAND = this._coarsePointer ? 22 : 12;
+    const LINE = 5;
+    const BADGE_R = 11;
+
+    const entries = [...layout.entries()].filter(
+      ([, box]) => box.type === "InsertNode",
+    );
+    const empty = !this._focusOrder || this._focusOrder.length === 0;
 
     for (const [id, box] of entries) {
-      const rect = document.createElementNS(svgNS, "rect");
-      rect.setAttribute("x", box.x + 2);
-      rect.setAttribute("y", box.y);
-      rect.setAttribute("width", box.w - 4);
-      rect.setAttribute("height", box.h);
-      rect.setAttribute("fill", INSERT_COLOR);
-      rect.setAttribute("stroke", "none");
-      rect.setAttribute("rx", "3");
-      rect.style.cursor = "pointer";
-      rect.style.transition = "fill 0.15s";
-      rect.addEventListener("mouseenter", () =>
-        rect.setAttribute("fill", INSERT_HOVER_COLOR),
-      );
-      rect.addEventListener("mouseleave", () =>
-        rect.setAttribute("fill", INSERT_COLOR),
-      );
-      rect.addEventListener("click", (e) => {
+      const y = box.y + box.h / 2 - BAND / 2;
+
+      const group = document.createElementNS(svgNS, "g");
+      group.style.cursor = "pointer";
+
+      const hit = document.createElementNS(svgNS, "rect");
+      hit.setAttribute("x", box.x + 2);
+      hit.setAttribute("y", y);
+      hit.setAttribute("width", Math.max(box.w - 4, 1));
+      hit.setAttribute("height", BAND);
+      hit.setAttribute("fill", "transparent");
+
+      // The visible half: a solid bar with a round "+" badge on it, drawn only
+      // while the pointer is over the seam.
+      const centreY = box.y + box.h / 2;
+
+      const line = document.createElementNS(svgNS, "rect");
+      line.setAttribute("x", box.x + 2);
+      line.setAttribute("y", centreY - LINE / 2);
+      line.setAttribute("width", Math.max(box.w - 4, 1));
+      line.setAttribute("height", LINE);
+      line.setAttribute("rx", LINE / 2);
+      line.setAttribute("fill", "transparent");
+      line.setAttribute("pointer-events", "none");
+      line.style.transition = "fill 0.12s";
+
+      const badge = document.createElementNS(svgNS, "circle");
+      badge.setAttribute("cx", box.x + box.w / 2);
+      badge.setAttribute("cy", centreY);
+      badge.setAttribute("r", BADGE_R);
+      badge.setAttribute("fill", "transparent");
+      badge.setAttribute("pointer-events", "none");
+      badge.style.transition = "fill 0.12s";
+
+      const plus = document.createElementNS(svgNS, "text");
+      plus.setAttribute("x", box.x + box.w / 2);
+      plus.setAttribute("y", centreY);
+      plus.setAttribute("text-anchor", "middle");
+      plus.setAttribute("dominant-baseline", "central");
+      plus.setAttribute("font-size", "17");
+      plus.setAttribute("font-weight", "bold");
+      plus.setAttribute("fill", "transparent");
+      plus.setAttribute("pointer-events", "none");
+      plus.style.transition = "fill 0.12s";
+      plus.textContent = "+";
+
+      const show = (on) => {
+        line.setAttribute("fill", on ? INSERT_LINE_COLOR : "transparent");
+        badge.setAttribute("fill", on ? INSERT_LINE_COLOR : "transparent");
+        plus.setAttribute("fill", on ? "#fff" : "transparent");
+      };
+      // An empty structogram has nothing to hover over, so its one slot has to
+      // announce itself — otherwise there is no way in at all.
+      if (empty) {
+        show(true);
+      } else {
+        group.addEventListener("mouseenter", () => show(true));
+        group.addEventListener("mouseleave", () => show(false));
+      }
+      group.addEventListener("click", (e) => {
         e.stopPropagation();
-        if (moveNodeId) {
-          this._tree = this._prepTree(moveNode(this._tree, moveNodeId, id));
-          this._setMode(null);
-          this._onTreeChange();
-        } else {
-          this._handleInsert(id);
-        }
+        this._showTypeMenu(id, box);
       });
 
-      // Drag-and-drop target
-      rect.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "copy";
-        rect.setAttribute("fill", INSERT_HOVER_COLOR);
-      });
-      rect.addEventListener("dragleave", () =>
-        rect.setAttribute("fill", INSERT_COLOR),
-      );
-      rect.addEventListener("drop", (e) => {
-        e.preventDefault();
-        const type = e.dataTransfer.getData("text/plain");
-        if (type) {
-          this._tree = this._prepTree(insertAt(this._tree, id, type));
-          this._setMode(null);
-          this._onTreeChange();
-        }
-      });
-
-      // "+" label
-      const text = document.createElementNS(svgNS, "text");
-      text.setAttribute("x", box.x + box.w / 2);
-      text.setAttribute("y", box.y + box.h / 2);
-      text.setAttribute("text-anchor", "middle");
-      text.setAttribute("dominant-baseline", "central");
-      text.setAttribute("fill", "rgba(1, 116, 96, 0.8)");
-      text.setAttribute("font-size", "16");
-      text.setAttribute("font-weight", "bold");
-      text.setAttribute("pointer-events", "none");
-      text.textContent = "+";
-
-      svg.appendChild(rect);
-      svg.appendChild(text);
+      group.append(hit, line, badge, plus);
+      svg.appendChild(group);
     }
   }
 
-  _handleInsert(targetId) {
-    if (!this._mode || !this._mode.startsWith("insert:")) return;
-    const type = this._mode.replace("insert:", "");
+  /**
+   * Where a node's SVG box lands, in CSS pixels.
+   *
+   * @param {Element} relativeTo the element the coordinates are measured from
+   */
+  _svgToScreen(box, relativeTo) {
+    const svgEl = this._editorArea.querySelector("svg");
+    if (!svgEl) return null;
+    const svgRect = svgEl.getBoundingClientRect();
+    const originRect = relativeTo.getBoundingClientRect();
+    const viewBox = svgEl.viewBox.baseVal;
+    const scale = Math.min(
+      svgRect.width / viewBox.width,
+      svgRect.height / viewBox.height,
+    );
+    return {
+      left: (box.x - viewBox.x) * scale + svgRect.left - originRect.left,
+      top: (box.y - viewBox.y) * scale + svgRect.top - originRect.top,
+      width: box.w * scale,
+      height: box.h * scale,
+      scale,
+    };
+  }
+
+  _showTypeMenu(slotId, box) {
+    this._hideTypeMenu();
+    // Measured against the host, because the editor area clips its overflow
+    // and a menu opened near the bottom would be cut in half by it.
+    const pos = this._svgToScreen(box, this);
+    if (!pos) return;
+
+    const menu = document.createElement("div");
+    menu.className = "type-menu";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "Insert a node here");
+
+    for (const item of TOOLBAR_ITEMS) {
+      const btn = this._button(item.icon, item.label, `Insert ${item.label}`, () => {
+        this._hideTypeMenu();
+        this._insertType(slotId, item.type);
+      });
+      btn.setAttribute("role", "menuitem");
+      menu.appendChild(btn);
+    }
+
+    menu.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        this._hideTypeMenu(true);
+      }
+    });
+
+    this._shadow.appendChild(menu);
+    this._typeMenu = menu;
+
+    // Under the slot by default, nudged back inside on the right, and flipped
+    // above when there is more room up there than down.
+    const hostW = this.clientWidth;
+    const hostH = this.clientHeight;
+    const menuW = menu.offsetWidth;
+    const menuH = menu.offsetHeight;
+
+    const left = Math.max(4, Math.min(pos.left + 8, hostW - menuW - 4));
+    let top = pos.top + pos.height + 6;
+    if (top + menuH > hostH - 4 && pos.top - menuH - 6 > 0) {
+      top = pos.top - menuH - 6;
+    }
+    top = Math.max(4, Math.min(top, hostH - menuH - 4));
+
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
+
+    menu.querySelector("button")?.focus();
+  }
+
+  _hideTypeMenu(restoreFocus) {
+    if (!this._typeMenu) return;
+    this._typeMenu.remove();
+    this._typeMenu = null;
+    if (restoreFocus && this._focusedId) this._setFocusedNode(this._focusedId);
+  }
+
+
+  /** Put a new node of `type` into the slot `targetId` and select it. */
+  _insertType(targetId, type) {
+    this._pushHistory();
     this._tree = this._prepTree(insertAt(this._tree, targetId, type));
     this._setMode(null);
     this._onTreeChange();
@@ -1141,56 +1549,10 @@ class StruktolabEditor extends HTMLElement {
 
   /* ── Delete targets ─────────────────────────────────────── */
 
-  _addDeleteTargets(svg, width, fontSize) {
-    const layout = this._computeLayout(
-      this._tree,
-      0,
-      0,
-      width,
-      fontSize,
-      false,
-    );
-    const svgNS = "http://www.w3.org/2000/svg";
-
-    // Sort by area descending so smaller child rects are appended last (on top in SVG)
-    const entries = [...layout.entries()]
-      .filter(
-        ([, box]) =>
-          box.type !== "InsertNode" &&
-          box.type !== "Placeholder" &&
-          box.type !== "InsertCase",
-      )
-      .sort(([, a], [, b]) => b.w * b.h - a.w * a.h);
-
-    for (const [id, box] of entries) {
-      const rect = document.createElementNS(svgNS, "rect");
-      rect.setAttribute("x", box.x);
-      rect.setAttribute("y", box.y);
-      rect.setAttribute("width", box.w);
-      rect.setAttribute("height", box.h);
-      rect.setAttribute("fill", "transparent");
-      rect.setAttribute("stroke", "none");
-      rect.style.cursor = "pointer";
-      rect.style.transition = "fill 0.15s";
-      rect.addEventListener("mouseenter", () =>
-        rect.setAttribute("fill", DELETE_HOVER_COLOR),
-      );
-      rect.addEventListener("mouseleave", () =>
-        rect.setAttribute("fill", "transparent"),
-      );
-      rect.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this._tree = this._prepTree(removeNode(this._tree, id));
-        this._setMode(null);
-        this._onTreeChange();
-      });
-      svg.appendChild(rect);
-    }
-  }
 
   /* ── Edit targets (click-to-edit) ───────────────────────── */
 
-  _addEditTargets(svg, width, fontSize) {
+  _addNodeTargets(svg, width, fontSize) {
     const layout = this._computeLayout(
       this._tree,
       0,
@@ -1208,7 +1570,23 @@ class StruktolabEditor extends HTMLElement {
       )
       .sort(([, a], [, b]) => b.w * b.h - a.w * a.h);
 
+    // Reading order, not paint order and not the order the layout recursion
+    // happens to visit: top to bottom, then left to right, which is how the
+    // diagram is read and so how the arrow keys should walk it.
+    this._focusOrder = [...layout.entries()]
+      .filter(([, box]) => box.type !== "InsertNode" && box.type !== "Placeholder")
+      .sort(([, a], [, b]) => a.y - b.y || a.x - b.x)
+      .map(([id]) => id);
+    this._boxes = layout;
+
+    if (this._focusedId && !layout.has(this._focusedId)) this._focusedId = null;
+    if (!this._focusedId) this._focusedId = this._focusOrder[0] ?? null;
+
     for (const [id, box] of entries) {
+      // The hit rect and the node's own buttons share one group, so moving the
+      // pointer from the node onto its buttons is not "leaving the node".
+      const group = document.createElementNS(svgNS, "g");
+
       const rect = document.createElementNS(svgNS, "rect");
       rect.setAttribute("x", box.x);
       rect.setAttribute("y", box.y);
@@ -1217,12 +1595,223 @@ class StruktolabEditor extends HTMLElement {
       rect.setAttribute("fill", "transparent");
       rect.setAttribute("stroke", "none");
       rect.style.cursor = "pointer";
+
+      // Screen readers get the node as a button whose name says what it is.
+      rect.setAttribute("role", "button");
+      rect.setAttribute("aria-label", this._nodeLabel(box));
+      rect.setAttribute("data-node-id", id);
+      // Roving tabindex: one stop for the whole diagram, arrows move within it.
+      rect.setAttribute("tabindex", id === this._focusedId ? "0" : "-1");
+
+      rect.addEventListener("click", (e) => {
+        e.stopPropagation();
+        rect.focus();
+      });
       rect.addEventListener("dblclick", (e) => {
         e.stopPropagation();
         this._showEditOverlay(id, box);
       });
-      svg.appendChild(rect);
+      rect.addEventListener("keydown", (e) => this._onNodeKeyDown(e, id, box));
+
+      group.appendChild(rect);
+
+      const actions = this._nodeActions(svgNS, id, box);
+      group.appendChild(actions);
+
+      const reveal = (on) => {
+        actions.style.opacity = on ? "1" : "0";
+        actions.style.pointerEvents = on ? "auto" : "none";
+      };
+      reveal(false);
+      group.addEventListener("mouseenter", () => reveal(true));
+      group.addEventListener("mouseleave", () => reveal(false));
+      // The keyboard has no hover, so focus reveals them too.
+      rect.addEventListener("focus", () => {
+        this._setFocusedNode(id, false);
+        reveal(true);
+      });
+      rect.addEventListener("blur", () => reveal(false));
+
+      svg.appendChild(group);
     }
+  }
+
+  /**
+   * The buttons that belong to one node: pick it up, or throw it away.
+   *
+   * They live at the node's top-right corner and only appear while the pointer
+   * or the keyboard is on the node, so a diagram at rest stays a diagram.
+   */
+  _nodeActions(svgNS, id, box) {
+    const size = this._coarsePointer ? 26 : 16;
+    const gap = 3;
+    const top = box.y + 3;
+    const right = box.x + box.w - 3;
+
+    const actions = document.createElementNS(svgNS, "g");
+    actions.style.transition = "opacity 0.12s";
+
+    const button = (x, glyph, colour, label, onActivate) => {
+      const g = document.createElementNS(svgNS, "g");
+      g.style.cursor = "pointer";
+
+      const bg = document.createElementNS(svgNS, "rect");
+      bg.setAttribute("x", x);
+      bg.setAttribute("y", top);
+      bg.setAttribute("width", size);
+      bg.setAttribute("height", size);
+      bg.setAttribute("rx", 3);
+      bg.setAttribute("fill", "rgba(255,255,255,0.85)");
+      bg.setAttribute("stroke", colour);
+      bg.setAttribute("stroke-width", "1");
+
+      const text = document.createElementNS(svgNS, "text");
+      text.setAttribute("x", x + size / 2);
+      text.setAttribute("y", top + size / 2);
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("dominant-baseline", "central");
+      text.setAttribute("font-size", String(Math.round(size * 0.7)));
+      text.setAttribute("fill", colour);
+      text.setAttribute("pointer-events", "none");
+      text.style.userSelect = "none";
+      text.textContent = glyph;
+
+      g.append(bg, text);
+      g.setAttribute("role", "button");
+      g.setAttribute("aria-label", label);
+      g.addEventListener("mouseenter", () => bg.setAttribute("fill", colour));
+      g.addEventListener("mouseleave", () =>
+        bg.setAttribute("fill", "rgba(255,255,255,0.85)"),
+      );
+      g.addEventListener("mouseenter", () => text.setAttribute("fill", "#fff"));
+      g.addEventListener("mouseleave", () => text.setAttribute("fill", colour));
+      onActivate(g);
+      return g;
+    };
+
+    // Delete on the right, where a close button belongs; drag to its left.
+    const del = button(
+      right - size,
+      "✕",
+      "rgb(192, 57, 43)",
+      "Delete this node",
+      (g) =>
+        g.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this._deleteNode(id);
+        }),
+    );
+
+    const drag = button(
+      right - size * 2 - gap,
+      "⠿",
+      "rgb(1, 116, 96)",
+      "Move this node",
+      (g) => {
+        g.setAttribute("data-grab", "move");
+        g.addEventListener("pointerdown", (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          this._startDrag(id, e);
+        });
+      },
+    );
+
+    actions.append(drag, del);
+    return actions;
+  }
+
+  /** "If/Else: a[i] > max" — what a screen reader should read out. */
+  _nodeLabel(box) {
+    const name = NODE_LABELS[box.type] || box.type;
+    const text = (box.text || "").trim();
+    return text ? `${name}: ${text}` : name;
+  }
+
+  _setFocusedNode(id, moveFocus = true) {
+    this._focusedId = id;
+    if (!moveFocus) return;
+    const rect = this._editorArea.querySelector(`[data-node-id="${id}"]`);
+    if (rect) {
+      for (const other of this._editorArea.querySelectorAll("[data-node-id]")) {
+        other.setAttribute("tabindex", other === rect ? "0" : "-1");
+      }
+      rect.focus();
+    }
+  }
+
+  _moveFocus(delta) {
+    if (!this._focusOrder || !this._focusOrder.length) return;
+    const at = this._focusOrder.indexOf(this._focusedId);
+    const next = Math.min(
+      this._focusOrder.length - 1,
+      Math.max(0, (at === -1 ? 0 : at) + delta),
+    );
+    this._setFocusedNode(this._focusOrder[next]);
+  }
+
+  _onNodeKeyDown(e, id, box) {
+    switch (e.key) {
+      case "Enter":
+      case "F2":
+        e.preventDefault();
+        this._showEditOverlay(id, box);
+        return;
+      case "Delete":
+      case "Backspace":
+        e.preventDefault();
+        this._deleteNode(id);
+        return;
+      case "ArrowDown":
+      case "ArrowRight":
+        e.preventDefault();
+        this._moveFocus(1);
+        return;
+      case "ArrowUp":
+      case "ArrowLeft":
+        e.preventDefault();
+        this._moveFocus(-1);
+        return;
+      case "Home":
+        e.preventDefault();
+        this._setFocusedNode(this._focusOrder[0]);
+        return;
+      case "End":
+        e.preventDefault();
+        this._setFocusedNode(this._focusOrder[this._focusOrder.length - 1]);
+        return;
+      case "+":
+      case "Insert":
+        e.preventDefault();
+        this._openInsertAfter(id, box);
+        return;
+      case "m":
+      case "M":
+        e.preventDefault();
+        this._keyboardMove = true;
+        this._startDrag(id);
+        return;
+    }
+  }
+
+  /** Open the insert menu on the slot that follows this node. */
+  _openInsertAfter(id, box) {
+    const node = findNode(this._tree, id);
+    const slot = node && node.followElement;
+    if (!slot || slot.type !== "InsertNode" || !slot.id) return;
+    this._showTypeMenu(slot.id, { ...box, y: box.y + box.h });
+  }
+
+  /** Remove a node, keeping the keyboard somewhere sensible afterwards. */
+  _deleteNode(id) {
+    const at = this._focusOrder ? this._focusOrder.indexOf(id) : -1;
+    const nextFocus =
+      at > 0 ? this._focusOrder[at - 1] : (this._focusOrder || [])[at + 1] ?? null;
+    this._focusedId = nextFocus;
+    this._pushHistory();
+    this._tree = this._prepTree(removeNode(this._tree, id));
+    this._setMode(null);
+    this._onTreeChange();
   }
 
   _showEditOverlay(nodeId, box) {
@@ -1274,9 +1863,9 @@ class StruktolabEditor extends HTMLElement {
     cancelBtn.textContent = "✗";
 
     const commit = () => {
-      this._tree = this._prepTree(editText(this._tree, nodeId, input.value));
       this._hideEditOverlay();
-      this._onTreeChange();
+      if (input.value === (node.text || "")) return;
+      this._commit(editText(this._tree, nodeId, input.value));
     };
     const cancel = () => this._hideEditOverlay();
 
@@ -1345,77 +1934,247 @@ class StruktolabEditor extends HTMLElement {
 
   /* ── Drag-to-reorder ────────────────────────────────────── */
 
-  _addDragTargets(svg, width, fontSize) {
-    const layout = this._computeLayout(
-      this._tree,
-      0,
-      0,
-      width,
-      fontSize,
-      false,
-    );
-    const svgNS = "http://www.w3.org/2000/svg";
 
-    // Make content nodes draggable via a drag handle
-    for (const [id, box] of layout) {
+  /* ── Moving a node ──────────────────────────────────────── */
+
+  /**
+   * Pick a node up.
+   *
+   * With a pointer this becomes a real drag: a ghost follows the finger and the
+   * slot it would land in lights up. Press and release without moving and it
+   * stays picked up instead, so tapping the grip and then tapping a slot works
+   * too — which is the only thing that works from a keyboard.
+   */
+  _startDrag(nodeId, event) {
+    this._setMode("move:" + nodeId);
+    if (!event || event.pointerId === undefined) return;
+
+    const ghost = document.createElement("div");
+    ghost.className = "drag-ghost";
+    ghost.textContent = this._nodeLabel(findNode(this._tree, nodeId) ?? { type: "" });
+    this._shadow.appendChild(ghost);
+
+    const drag = { nodeId, ghost, moved: false, startX: event.clientX, startY: event.clientY };
+    this._drag = drag;
+    this._positionGhost(event.clientX, event.clientY);
+
+    const onMove = (e) => {
       if (
-        box.type === "InsertNode" ||
-        box.type === "Placeholder" ||
-        box.type === "InsertCase"
-      )
-        continue;
+        !drag.moved &&
+        Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 4
+      ) {
+        return;
+      }
+      drag.moved = true;
+      ghost.style.display = "block";
+      this._positionGhost(e.clientX, e.clientY);
+      this._highlightSlot(this._nearestSlot(e.clientX, e.clientY));
+    };
 
-      const handleSize = 14;
-      const handleX = box.x + box.w - handleSize - 4;
-      const handleY = box.y + 4;
+    const onUp = () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
+      ghost.remove();
+      this._drag = null;
 
-      const handle = document.createElementNS(svgNS, "text");
-      handle.setAttribute("x", handleX + handleSize / 2);
-      handle.setAttribute("y", handleY + handleSize / 2);
-      handle.setAttribute("text-anchor", "middle");
-      handle.setAttribute("dominant-baseline", "central");
-      handle.setAttribute("font-size", "12");
-      handle.setAttribute("fill", "rgba(0,0,0,0.3)");
-      handle.textContent = "⠿";
-      handle.style.cursor = "grab";
-      handle.style.userSelect = "none";
+      if (!drag.moved) return; // A tap: stay picked up, wait for the second tap.
+      const slot = this._activeSlot;
+      this._activeSlot = null;
+      if (slot) this._dropAt(slot.id);
+      else this._setMode(null);
+    };
 
-      // We need a transparent rect behind the handle for the drag
-      const dragRect = document.createElementNS(svgNS, "rect");
-      dragRect.setAttribute("x", handleX);
-      dragRect.setAttribute("y", handleY);
-      dragRect.setAttribute("width", handleSize);
-      dragRect.setAttribute("height", handleSize);
-      dragRect.setAttribute("fill", "transparent");
-      dragRect.style.cursor = "grab";
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+  }
 
-      // Use a foreignObject wrapper to make drag work
-      const wrapper = document.createElementNS(svgNS, "g");
-      wrapper.appendChild(dragRect);
-      wrapper.appendChild(handle);
+  _positionGhost(clientX, clientY) {
+    if (!this._drag) return;
+    this._drag.ghost.style.left = clientX + 12 + "px";
+    this._drag.ghost.style.top = clientY + 12 + "px";
+  }
 
-      // Make the whole node area draggable
-      const dragOverlay = document.createElementNS(svgNS, "rect");
-      dragOverlay.setAttribute("x", box.x);
-      dragOverlay.setAttribute("y", box.y);
-      dragOverlay.setAttribute("width", box.w);
-      dragOverlay.setAttribute("height", box.h);
-      dragOverlay.setAttribute("fill", "transparent");
-      dragOverlay.setAttribute("stroke", "none");
+  /** The slot the pointer is closest to, or null if it is nowhere near one. */
+  _nearestSlot(clientX, clientY) {
+    const svg = this._editorArea.querySelector("svg");
+    if (!svg || !this._moveSlots || !this._moveSlots.length) return null;
 
-      // We'll track drag via the native drag system on a foreignObject
-      // Since SVG drag is tricky, we use mousedown → mode change approach
-      wrapper.addEventListener("mousedown", (e) => {
-        e.stopPropagation();
-        this._startDrag(id);
-      });
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const point = svg.createSVGPoint();
+    point.x = clientX;
+    point.y = clientY;
+    const { x, y } = point.matrixTransform(ctm.inverse());
 
-      svg.appendChild(wrapper);
+    let best = null;
+    let bestScore = Infinity;
+    for (const slot of this._moveSlots) {
+      const { box } = slot;
+      const centreY = box.y + box.h / 2;
+      // Vertical distance decides; being in the wrong column is a tie-breaker,
+      // so a nested slot wins over the outer one at the same height.
+      const outside = x < box.x || x > box.x + box.w;
+      const score = Math.abs(y - centreY) + (outside ? 1000 : 0);
+      if (score < bestScore) {
+        bestScore = score;
+        best = slot;
+      }
+    }
+    return best;
+  }
+
+  _highlightSlot(slot) {
+    if (this._activeSlot === slot) return;
+    this._activeSlot = slot;
+    for (const candidate of this._moveSlots || []) {
+      candidate.setActive(candidate === slot);
     }
   }
 
-  _startDrag(nodeId) {
-    this._setMode("move:" + nodeId);
+  _dropAt(slotId) {
+    const nodeId = this._mode && this._mode.replace("move:", "");
+    this._activeSlot = null;
+    this._moveSlots = [];
+    if (!nodeId) return;
+    this._pushHistory();
+    this._tree = this._prepTree(moveNode(this._tree, nodeId, slotId));
+    this._focusedId = null;
+    this._setMode(null);
+    this._onTreeChange();
+  }
+
+  /**
+   * The slots a node can land in, drawn over the diagram rather than carved
+   * into it. Slots inside the node itself are left out — dropping a loop into
+   * its own body is not a move, and used to lose the loop.
+   */
+  _addMoveTargets(svg, width, fontSize, movingId) {
+    const layout = this._computeLayout(this._tree, 0, 0, width, fontSize, false);
+    const svgNS = "http://www.w3.org/2000/svg";
+    const BAND = this._coarsePointer ? 26 : 16;
+
+    const moving = findNode(this._tree, movingId);
+    const excluded = moving ? collectMovedIds(moving) : new Set();
+    const currentSlot = this._slotHolding(this._tree, movingId);
+
+    this._moveSlots = [];
+    this._activeSlot = null;
+
+    // Show what is being carried, so it is never a mystery.
+    const movingBox = layout.get(movingId);
+    if (movingBox) {
+      const marker = document.createElementNS(svgNS, "rect");
+      marker.setAttribute("x", movingBox.x + 1);
+      marker.setAttribute("y", movingBox.y + 1);
+      marker.setAttribute("width", Math.max(movingBox.w - 2, 1));
+      marker.setAttribute("height", Math.max(movingBox.h - 2, 1));
+      marker.setAttribute("fill", "rgba(1, 116, 96, 0.10)");
+      marker.setAttribute("stroke", INSERT_LINE_COLOR);
+      marker.setAttribute("stroke-width", "2");
+      marker.setAttribute("stroke-dasharray", "6 4");
+      marker.setAttribute("rx", "3");
+      marker.setAttribute("pointer-events", "none");
+      svg.appendChild(marker);
+    }
+
+    for (const [id, box] of layout) {
+      if (box.type !== "InsertNode") continue;
+      if (excluded.has(id) || id === currentSlot) continue;
+
+      const centreY = box.y + box.h / 2;
+      const group = document.createElementNS(svgNS, "g");
+      group.style.cursor = "pointer";
+
+      const hit = document.createElementNS(svgNS, "rect");
+      hit.setAttribute("x", box.x + 2);
+      hit.setAttribute("y", centreY - BAND / 2);
+      hit.setAttribute("width", Math.max(box.w - 4, 1));
+      hit.setAttribute("height", BAND);
+      hit.setAttribute("fill", "transparent");
+
+      const bar = document.createElementNS(svgNS, "rect");
+      bar.setAttribute("x", box.x + 2);
+      bar.setAttribute("width", Math.max(box.w - 4, 1));
+      bar.setAttribute("pointer-events", "none");
+      bar.style.transition = "fill 0.1s, height 0.1s, y 0.1s";
+
+      const setActive = (on) => {
+        bar.setAttribute("y", centreY - (on ? 4 : 1.5));
+        bar.setAttribute("height", on ? 8 : 3);
+        bar.setAttribute("rx", on ? 4 : 1.5);
+        bar.setAttribute("fill", on ? INSERT_LINE_COLOR : INSERT_COLOR);
+      };
+      setActive(false);
+
+      // The attributes go on the rect, not the group: a <g> is a container and
+      // does not take focus, so a tabindex on it would be ignored.
+      hit.setAttribute("role", "button");
+      hit.setAttribute("aria-label", "Move here");
+      hit.setAttribute("tabindex", this._moveSlots.length === 0 ? "0" : "-1");
+      hit.addEventListener("focus", () => this._highlightSlot(slot));
+      hit.addEventListener("mouseenter", () => this._highlightSlot(slot));
+      hit.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this._dropAt(id);
+      });
+      hit.addEventListener("keydown", (e) => this._onSlotKeyDown(e, id));
+
+      group.append(hit, bar);
+      svg.appendChild(group);
+
+      const slot = { id, box, setActive, element: hit };
+      this._moveSlots.push(slot);
+    }
+
+  }
+
+  /** The id of the InsertNode that currently holds `nodeId`, if any. */
+  _slotHolding(node, nodeId) {
+    if (!node || typeof node !== "object") return null;
+    if (node.type === "InsertNode" && node.followElement?.id === nodeId) return node.id;
+    for (const key of ["followElement", "trueChild", "falseChild", "child", "tryChild", "catchChild", "defaultNode"]) {
+      const found = this._slotHolding(node[key], nodeId);
+      if (found) return found;
+    }
+    if (node.cases) {
+      for (const c of node.cases) {
+        const found = this._slotHolding(c, nodeId);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  _onSlotKeyDown(e, id) {
+    const at = this._moveSlots.findIndex((s) => s.id === id);
+    const focusSlot = (index) => {
+      const slot = this._moveSlots[Math.max(0, Math.min(this._moveSlots.length - 1, index))];
+      if (!slot) return;
+      for (const other of this._moveSlots) {
+        other.element.setAttribute("tabindex", other === slot ? "0" : "-1");
+      }
+      slot.element.focus();
+    };
+
+    switch (e.key) {
+      case "ArrowDown":
+      case "ArrowRight":
+        e.preventDefault();
+        focusSlot(at + 1);
+        return;
+      case "ArrowUp":
+      case "ArrowLeft":
+        e.preventDefault();
+        focusSlot(at - 1);
+        return;
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        this._dropAt(id);
+        return;
+    }
   }
 
   /* ── Move mode targets (shown during drag/move) ─────────── */
@@ -1447,13 +2206,14 @@ class StruktolabEditor extends HTMLElement {
       const slopeH = fontSize * 1.3 + 6;
       const headerH = condH + slopeH;
 
-      // "+" button: add a new case — placed in top-right of the header
-      const addX = box.x + box.w - BTN_SIZE - 4;
+      // "+" button: add a new case. Sits left of the node's own hover buttons,
+      // which occupy the top-right corner.
+      const actionsW = (this._coarsePointer ? 26 : 16) * 2 + 3 + 3;
+      const addX = box.x + box.w - BTN_SIZE - 4 - actionsW;
       const addY = box.y + 3;
       this._createSvgButton(svg, svgNS, addX, addY, BTN_SIZE, BTN_R, "+",
         "rgba(1,116,96,0.75)", "rgba(1,116,96,1)", () => {
-          this._tree = this._prepTree(addCase(this._tree, id));
-          this._onTreeChange();
+          this._commit(addCase(this._tree, id));
         });
 
       // "×" buttons on each case column (only if more than 1 case)
@@ -1465,8 +2225,7 @@ class StruktolabEditor extends HTMLElement {
           const delY = box.y + headerH + 2;
           this._createSvgButton(svg, svgNS, delX, delY, BTN_SIZE, BTN_R, "×",
             "rgba(192,57,43,0.65)", "rgba(192,57,43,1)", () => {
-              this._tree = this._prepTree(removeCase(this._tree, caseId));
-              this._onTreeChange();
+              this._commit(removeCase(this._tree, caseId));
             });
           curX += colW[i];
         }
@@ -1518,7 +2277,7 @@ class StruktolabEditor extends HTMLElement {
   _addResizeHandles(svg, width, fontSize) {
     const layout = this._computeLayout(this._tree, 0, 0, width, fontSize, false);
     const svgNS = "http://www.w3.org/2000/svg";
-    const HANDLE_WIDTH = 6;
+    const HANDLE_WIDTH = this._coarsePointer ? 22 : 6;
 
     for (const [id, box] of layout) {
       if (box.type !== "BranchNode" && box.type !== "CaseNode") continue;
@@ -1601,13 +2360,14 @@ class StruktolabEditor extends HTMLElement {
         handle.setAttribute("width", HANDLE_WIDTH);
         handle.setAttribute("height", Math.max(div.h, 20));
         handle.setAttribute("fill", "transparent");
+        handle.setAttribute("data-grab", "resize");
         handle.style.cursor = "col-resize";
 
         const dividerIndex = i;
-        handle.addEventListener("mousedown", (e) => {
+        handle.addEventListener("pointerdown", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          this._startColumnResize(svg, node, id, dividerIndex, numCols, fractions, box);
+          this._startColumnResize(svg, node, id, dividerIndex, numCols, fractions, box, e);
         });
 
         svg.appendChild(handle);
@@ -1622,8 +2382,12 @@ class StruktolabEditor extends HTMLElement {
     return Math.max(40, lines.length * lineH + PADDING_Y * 2);
   }
 
-  _startColumnResize(svg, node, nodeId, dividerIndex, numCols, fractions, box) {
+  _startColumnResize(svg, node, nodeId, dividerIndex, numCols, fractions, box, pointerEvent) {
     this._editorArea.classList.add("resizing");
+
+    // The drag mutates node.columnWidths in place for a live preview, so the
+    // undo snapshot has to be taken before the first move, not at the end.
+    const before = cloneTree(this._tree);
 
     const svgEl = svg;
     const svgRect = svgEl.getBoundingClientRect();
@@ -1638,7 +2402,7 @@ class StruktolabEditor extends HTMLElement {
     const MIN_FRACTION = 0.1;
     let rafId = null;
 
-    const onMouseMove = (e) => {
+    const onPointerMove = (e) => {
       const mouseX = e.clientX;
       const relX = mouseX - boxLeftScreen;
       const rawFraction = relX / boxWidth;
@@ -1682,18 +2446,30 @@ class StruktolabEditor extends HTMLElement {
       }
     };
 
-    const onMouseUp = () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
+    const onPointerUp = () => {
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("pointercancel", onPointerUp);
       if (rafId != null) cancelAnimationFrame(rafId);
       this._editorArea.classList.remove("resizing");
 
       node.columnWidths = [...currentFractions];
+      this._pushHistory(before);
       this._onTreeChange();
     };
 
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
+    // Pointer events cover mouse, pen and touch with one code path; capture
+    // keeps the drag alive when the finger leaves the 6px divider.
+    if (pointerEvent && pointerEvent.target.setPointerCapture) {
+      try {
+        pointerEvent.target.setPointerCapture(pointerEvent.pointerId);
+      } catch {
+        // Capture is a nicety; the document listeners work without it.
+      }
+    }
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("pointercancel", onPointerUp);
   }
 
   /* ── Pseudocode sync ────────────────────────────────────── */
@@ -1729,6 +2505,7 @@ class StruktolabEditor extends HTMLElement {
       const newTree = this._prepTree(
         parsePseudocode(code, this._getKeywords()),
       );
+      this._pushHistory();
       this._tree = newTree;
       this._errorEl.style.display = "none";
       this._render();
@@ -1769,9 +2546,18 @@ class StruktolabEditor extends HTMLElement {
   loadJSON(json) {
     const data = typeof json === "string" ? JSON.parse(json) : json;
     this._tree = this._prepTree(data);
+    // A different document, not an edit to this one — undoing back across it
+    // would put the user in a structogram they never opened.
+    this._resetHistory();
     this._render();
     this._syncTreeToPseudocode();
     this._emitChange();
+  }
+
+  _resetHistory() {
+    this._undoStack.length = 0;
+    this._redoStack.length = 0;
+    this._updateHistoryButtons();
   }
 
   /**
@@ -1867,6 +2653,17 @@ class StruktolabEditor extends HTMLElement {
     try {
       const blob = await this.exportImage(format);
       const ext = format === "svg" ? "svg" : "png";
+      // Embedded, a browser download is the wrong move — hand the image to the
+      // host, which knows where the document lives and can ask where to put it.
+      if (this.hasAttribute("embedded")) {
+        this.dispatchEvent(
+          new CustomEvent("export-image", {
+            detail: { format: ext, blob },
+            bubbles: true,
+          }),
+        );
+        return;
+      }
       this._downloadBlob(blob, `structogram.${ext}`);
     } catch (err) {
       console.error("struktolab-editor: export failed", err);

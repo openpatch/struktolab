@@ -1,0 +1,29 @@
+name: Pull Request
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # Build first: the platforms consume the library through its built `dist`,
+      # so typechecking one before the library is built cannot resolve it.
+      # `pnpm -r build` goes in topological order.
+      - name: Build packages
+        run: pnpm build
+      - name: Lint packages
+        run: pnpm lint

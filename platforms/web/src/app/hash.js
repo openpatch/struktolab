@@ -1,4 +1,12 @@
 import { inflate, deflate } from "pako";
+import { serializeDocument, applyDocument } from "struktolab/editor";
+
+/**
+ * The URL-hash transport: `#pako:<url-safe base64 of a deflated document>`.
+ *
+ * The payload is the same envelope a `.struktolab` file holds, plus an `origin`
+ * that only makes sense for a shared link.
+ */
 
 export function loadFromHash(editor) {
   const hash = window.location.hash;
@@ -14,23 +22,7 @@ export function loadFromHash(editor) {
     const bytes = new Uint8Array(raw.length);
     for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
     const inflated = inflate(bytes, { to: "string" });
-    const state = JSON.parse(inflated);
-    if (state.model) {
-      editor.loadJSON(state.model);
-      if (state.settings && state.settings.lang) {
-        editor.setAttribute("lang", state.settings.lang === "en" ? "en" : "de");
-      }
-      if (state.settings && state.settings.fontSize) {
-        editor.setAttribute("font-size", state.settings.fontSize);
-      }
-      if (state.settings && state.settings.colorMode) {
-        editor.setAttribute("color-mode", state.settings.colorMode);
-      }
-      if (state.settings && state.settings.scale) {
-        editor.setAttribute("scale", state.settings.scale);
-      }
-      return true;
-    }
+    return applyDocument(editor, JSON.parse(inflated));
   } catch (e) {
     console.error("StruktoLab: failed to load from URL hash", e);
   }
@@ -41,14 +33,7 @@ export function saveToHash(editor) {
   try {
     const state = {
       origin: window.location.origin + window.location.pathname,
-      version: 2,
-      model: JSON.parse(editor.saveJSON()),
-      settings: {
-        lang: editor.getAttribute("lang") || "de",
-        fontSize: editor.getAttribute("font-size") || "14",
-        colorMode: editor.getAttribute("color-mode") || "color",
-        scale: editor.getAttribute("scale") || "1",
-      },
+      ...serializeDocument(editor),
     };
     const json = JSON.stringify(state);
     const data = new TextEncoder().encode(json);

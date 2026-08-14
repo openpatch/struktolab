@@ -1,7 +1,10 @@
 import { defineConfig } from "vite";
 import { resolve } from "path";
+import { fileURLToPath } from "url";
 
-export default defineConfig(({ mode }) => {
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
+
+export default defineConfig(() => {
   const target = process.env.BUILD_TARGET;
 
   // Library build: renderer component
@@ -15,6 +18,22 @@ export default defineConfig(({ mode }) => {
           fileName: (format) => `struktolab-renderer.${format}.js`,
         },
         outDir: "dist/renderer",
+        emptyOutDir: true,
+      },
+    };
+  }
+
+  // Library build: the DOM-free core, for Node consumers
+  if (target === "core") {
+    return {
+      build: {
+        lib: {
+          entry: resolve(__dirname, "src/core/index.js"),
+          name: "StruktolabCore",
+          formats: ["umd", "es"],
+          fileName: (format) => `struktolab-core.${format}.js`,
+        },
+        outDir: "dist/core",
         emptyOutDir: true,
       },
     };
@@ -36,22 +55,7 @@ export default defineConfig(({ mode }) => {
     };
   }
 
-  // Default: app build (index.html + documentation.html)
-  return {
-    root: ".",
-    build: {
-      outDir: "build",
-      emptyOutDir: true,
-      rollupOptions: {
-        input: {
-          main: resolve(__dirname, "index.html"),
-          documentation: resolve(__dirname, "documentation.html"),
-        },
-      },
-    },
-    server: {
-      port: 8080,
-      open: true,
-    },
-  };
+  throw new Error(
+    "Set BUILD_TARGET to 'editor', 'renderer' or 'core'. The web app lives in platforms/web.",
+  );
 });

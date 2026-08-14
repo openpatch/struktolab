@@ -209,8 +209,43 @@ export function editText(tree, nodeId, newText) {
 /**
  * Move a node from its current position to a target InsertNode/Placeholder.
  */
+/**
+ * Every id carried along when `node` is moved.
+ *
+ * A move takes the node and whatever is nested inside it, but leaves its
+ * followElement chain behind — so the chain is not part of the payload.
+ */
+export function collectMovedIds(node) {
+  const ids = new Set();
+  if (!node) return ids;
+  ids.add(node.id);
+
+  const walk = (n) => {
+    if (!n) return;
+    if (n.id) ids.add(n.id);
+    for (const key of ["followElement", "trueChild", "falseChild", "child", "tryChild", "catchChild", "defaultNode"]) {
+      walk(n[key]);
+    }
+    if (n.cases) n.cases.forEach(walk);
+  };
+
+  for (const key of ["trueChild", "falseChild", "child", "tryChild", "catchChild", "defaultNode"]) {
+    walk(node[key]);
+  }
+  if (node.cases) node.cases.forEach(walk);
+
+  return ids;
+}
+
 export function moveNode(tree, nodeId, targetId) {
   if (nodeId === targetId) return tree;
+
+  // Dropping a node inside itself has no meaning, and used to eat it: the
+  // source is detached first, so the target could no longer be found and the
+  // half-finished move was returned with the node gone.
+  const source = findNode(tree, nodeId);
+  if (source && collectMovedIds(source).has(targetId)) return tree;
+
   let root = cloneTree(tree);
 
   // Find and detach the source node

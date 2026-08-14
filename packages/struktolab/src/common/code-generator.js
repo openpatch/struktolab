@@ -80,6 +80,45 @@ function indent(level) {
 }
 
 /**
+ * A count loop is written as a range in words — "i = 2 bis n", "i = 1 to 10" —
+ * and every target language spells that differently. Pull the three parts out
+ * so each language can write its own loop header instead of echoing the German.
+ *
+ * @returns {{variable: string, from: string, to: string} | null}
+ */
+function parseCountRange(text) {
+  const match = /^\s*(\S+)\s*=\s*(.+?)\s+(?:bis|to)\s+(.+?)\s*$/i.exec(text || "");
+  if (!match) return null;
+  return { variable: match[1], from: match[2].trim(), to: match[3].trim() };
+}
+
+/** The loop header for a count loop, without the surrounding brackets. */
+function countLoopHeader(text, lang) {
+  const range = parseCountRange(text);
+  // Anything that is not a range stays exactly as the user wrote it.
+  if (!range) return { header: text, wrap: true };
+
+  const { variable, from, to } = range;
+  switch (lang) {
+    case "python":
+      // range() stops one short, so the inclusive end has to be spelled out.
+      return { header: `${variable} in range(${from}, ${to} + 1)`, wrap: true };
+    case "java":
+      return {
+        header: `int ${variable} = ${from}; ${variable} <= ${to}; ${variable}++`,
+        wrap: true,
+      };
+    case "javascript":
+      return {
+        header: `let ${variable} = ${from}; ${variable} <= ${to}; ${variable}++`,
+        wrap: true,
+      };
+    default:
+      return { header: text, wrap: true };
+  }
+}
+
+/**
  * Generate source code from a struktog tree.
  * @param {Object} tree - The struktog tree (root InsertNode)
  * @param {string} lang - Target language: "python", "java", or "javascript"
@@ -148,7 +187,7 @@ function transform(node, level, t, lang) {
       lines.push(
         indent(level) +
           t.CountLoopNode.pre +
-          text +
+          countLoopHeader(text, lang.toLowerCase()).header +
           t.CountLoopNode.post +
           (t.leftBracket ? " " + t.leftBracket + "\n" : ""),
       );

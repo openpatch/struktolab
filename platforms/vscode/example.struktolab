@@ -1,0 +1,37 @@
+{
+  "version": 2,
+  "model": {
+    "type": "InputNode",
+    "text": "Zahlenfolge a[1..n]",
+    "followElement": {
+      "type": "TaskNode",
+      "text": "max = a[1]",
+      "followElement": {
+        "type": "CountLoopNode",
+        "text": "i = 2 bis n",
+        "child": {
+          "type": "BranchNode",
+          "text": "a[i] > max",
+          "trueChild": {
+            "type": "TaskNode",
+            "text": "max = a[i]",
+            "followElement": null
+          },
+          "falseChild": null,
+          "followElement": null
+        },
+        "followElement": {
+          "type": "OutputNode",
+          "text": "max",
+          "followElement": null
+        }
+      }
+    }
+  },
+  "settings": {
+    "lang": "de",
+    "fontSize": "14",
+    "colorMode": "color",
+    "scale": "1"
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "name": "struktolab-studio",
+  "displayName": "StruktoLab Studio",
+  "description": "Visual editor for .struktolab files — Nassi-Shneiderman structograms",
+  "version": "0.4.2",
+  "publisher": "openpatch",
+  "author": "Mike Barkmin",
+  "license": "MIT",
+  "private": true,
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openpatch/struktolab.git",
+    "directory": "platforms/vscode"
+  },
+  "keywords": [
+    "structogram",
+    "nassi-shneiderman",
+    "struktogramm",
+    "education",
+    "visual-editor"
+  ],
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Visualization",
+    "Education"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "browser": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "struktolab.editor",
+        "displayName": "StruktoLab",
+        "selector": [
+          { "filenamePattern": "*.struktolab", "scheme": "file" },
+          { "filenamePattern": "*.struktolab", "scheme": "untitled" }
+        ],
+        "priority": "default"
+      }
+    ],
+    "languages": [
+      {
+        "id": "struktolab",
+        "extensions": [".struktolab"],
+        "aliases": ["StruktoLab"],
+        "icon": { "light": "./icon.png", "dark": "./icon.png" }
+      }
+    ],
+    "commands": [
+      {
+        "command": "struktolab.new",
+        "title": "New Structogram",
+        "category": "StruktoLab"
+      },
+      {
+        "command": "struktolab.showSource",
+        "title": "Show Source",
+        "category": "StruktoLab"
+      },
+      {
+        "command": "struktolab.showDiagram",
+        "title": "Show Structogram",
+        "category": "StruktoLab"
+      },
+      {
+        "command": "struktolab.showCode",
+        "title": "Open Generated Code",
+        "category": "StruktoLab"
+      },
+      {
+        "command": "struktolab.copyCode",
+        "title": "Copy Generated Code",
+        "category": "StruktoLab"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "struktolab.showSource",
+          "when": "activeCustomEditorId == struktolab.editor",
+          "group": "navigation"
+        },
+        {
+          "command": "struktolab.showDiagram",
+          "when": "resourceExtname == .struktolab && activeCustomEditorId != struktolab.editor",
+          "group": "navigation"
+        },
+        {
+          "command": "struktolab.showCode",
+          "when": "resourceExtname == .struktolab",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "struktolab.showCode",
+          "when": "resourceExtname == .struktolab"
+        },
+        {
+          "command": "struktolab.copyCode",
+          "when": "resourceExtname == .struktolab"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-vscode.mjs",
+    "watch": "node ../../scripts/build-vscode.mjs --watch",
+    "lint": "tsc --noEmit",
+    "vscode:package": "vsce package",
+    "vscode:publish": "vsce publish --packagePath $(find . -iname *.vsix)",
+    "ovsx:publish": "ovsx publish $(find . -iname *.vsix)"
+  },
+  "dependencies": {
+    "struktolab": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.2.1",
+    "ovsx": "^0.10.6",
+    "typescript": "^5.7.2"
+  },
+  "vsce": {
+    "dependencies": false,
+    "skipDuplicate": true
+  }
+}

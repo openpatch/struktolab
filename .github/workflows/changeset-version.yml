@@ -18,9 +18,9 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9.1.1
+          version: 10
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: "pnpm"
@@ -29,6 +29,13 @@ jobs:
       - name: Build packages
         run: |
           pnpm build
+
+      # Before the changesets step on purpose. On the run that publishes, the
+      # version in package.json is already the new one — it was bumped in the
+      # "Version Packages" pull request that this run is the merge of — so the
+      # vsix is built with the version that is about to be released.
+      - name: Build vscode package
+        run: pnpm --filter "struktolab-studio" vscode:package
 
       - name: Create Release Pull Request or Publish to npm
         id: changesets
@@ -39,3 +46,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish VS Code extension
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          pnpm --filter "struktolab-studio" vscode:publish
+          pnpm --filter "struktolab-studio" ovsx:publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_TOKEN }}
+          OVSX_PAT: ${{ secrets.OVSX_TOKEN }}

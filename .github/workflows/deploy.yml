@@ -26,16 +26,17 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
+      # Topological, so the library is built before the app that consumes it.
       - run: pnpm build
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: build
+          path: platforms/web/dist
 
   deploy:
     needs: build

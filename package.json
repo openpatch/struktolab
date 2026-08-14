@@ -1,66 +1,24 @@
 {
-  "name": "struktolab",
-  "version": "0.4.2",
-  "description": "A web-based structogram (Nassi-Shneiderman diagram) editor and renderer with code generation",
-  "type": "module",
-  "main": "dist/editor/struktolab-editor.umd.js",
-  "module": "dist/editor/struktolab-editor.es.js",
-  "exports": {
-    ".": {
-      "import": "./dist/editor/struktolab-editor.es.js",
-      "require": "./dist/editor/struktolab-editor.umd.js"
-    },
-    "./renderer": {
-      "import": "./dist/renderer/struktolab-renderer.es.js",
-      "require": "./dist/renderer/struktolab-renderer.umd.js"
-    },
-    "./editor": {
-      "import": "./dist/editor/struktolab-editor.es.js",
-      "require": "./dist/editor/struktolab-editor.umd.js"
-    }
-  },
-  "files": [
-    "dist",
-    "README.md",
-    "license.md"
-  ],
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "build:renderer": "BUILD_TARGET=renderer vite build",
-    "build:editor": "BUILD_TARGET=editor vite build",
-    "build:lib": "BUILD_TARGET=renderer vite build && BUILD_TARGET=editor vite build",
-    "build:all": "vite build && BUILD_TARGET=renderer vite build && BUILD_TARGET=editor vite build",
-    "preview": "vite preview",
-    "changeset": "changeset",
-    "release": "pnpm build:lib && changeset publish",
-    "version-packages": "changeset version"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/openpatch/struktolab.git"
-  },
-  "homepage": "https://struktolab.openpatch.org",
-  "bugs": {
-    "url": "https://github.com/openpatch/struktolab/issues"
-  },
-  "keywords": [
-    "structogram",
-    "nassi-shneiderman",
-    "diagram",
-    "editor",
-    "web-component"
-  ],
+  "name": "struktolab-root",
   "author": "OpenPatch",
-  "contributors": [
-    "Mike Barkmin"
-  ],
   "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "preinstall": "npx only-allow pnpm",
+    "dev": "pnpm --parallel -r dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "version-packages": "changeset version",
+    "release": "changeset publish"
+  },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",
-    "vite": "^7.3.1"
+    "@types/node": "^22.10.0",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.7.2"
   },
-  "dependencies": {
-    "pako": "^2.1.0"
+  "engines": {
+    "pnpm": ">=9"
   }
 }
