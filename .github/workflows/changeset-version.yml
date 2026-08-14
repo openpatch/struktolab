@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+permissions:
+  id-token: write  # Required for OIDC
+  contents: write
+
 jobs:
   release:
     name: Release
@@ -44,8 +48,8 @@ jobs:
           publish: pnpm release
           version: pnpm version-packages
         env:
+          # npm auth comes from OIDC trusted publishing, not a token.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish VS Code extension
         if: steps.changesets.outputs.published == 'true'
