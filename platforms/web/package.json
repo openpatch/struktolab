@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "The StruktoLab web app, served at struktolab.openpatch.org",
   "private": true,
   "type": "module",
