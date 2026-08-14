@@ -1,6 +1,6 @@
-# struktolab
+# struktolab-studio
 
-## 0.6.0
+## 0.5.0
 
 ### Minor Changes
 
@@ -53,46 +53,8 @@
   In VS Code, `StruktoLab: Open Generated Code` and `Copy Generated Code` turn the
   active structogram into Python, Java or JavaScript.
 
-## 0.5.0
-
-### Minor Changes
-
-- 8c90fd3: Add resizie via mouse dragging
-- 9471476: Add button for adding and removing cases
-
-## 0.4.2
-
 ### Patch Changes
 
-- 431ec73: Fix editor not accessible
-
-## 0.4.1
-
-### Patch Changes
-
-- c0c5d9f: Fix scale not used in renderer
-
-## 0.4.0
-
-### Minor Changes
-
-- 0e1c655: Add greyscale and black & white option. Also fixed loading of color mode.
-
-## 0.3.0
-
-### Minor Changes
-
-- 61a5162: Renderer can now also use color-mode
-
-## 0.2.0
-
-### Minor Changes
-
-- e31f70a: save all settings to the url
-
-## 0.1.0
-
-### Minor Changes
-
-- 983fcc5: Complete rewrite of the old struktog. There are now two webcomponents, which are using an svg-renderer.
-- b99e6e9: Add color mode switcher
+- Updated dependencies [21aaf82]
+- Updated dependencies [21aaf82]
+  - struktolab@0.6.0
