@@ -2,7 +2,7 @@
   "name": "struktolab-studio",
   "displayName": "StruktoLab Studio",
   "description": "Visual editor for .struktolab files — Nassi-Shneiderman structograms",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "publisher": "openpatch",
   "author": "Mike Barkmin",
   "license": "MIT",
@@ -36,8 +36,14 @@
         "viewType": "struktolab.editor",
         "displayName": "StruktoLab",
         "selector": [
-          { "filenamePattern": "*.struktolab", "scheme": "file" },
-          { "filenamePattern": "*.struktolab", "scheme": "untitled" }
+          {
+            "filenamePattern": "*.struktolab",
+            "scheme": "file"
+          },
+          {
+            "filenamePattern": "*.struktolab",
+            "scheme": "untitled"
+          }
         ],
         "priority": "default"
       }
@@ -45,9 +51,16 @@
     "languages": [
       {
         "id": "struktolab",
-        "extensions": [".struktolab"],
-        "aliases": ["StruktoLab"],
-        "icon": { "light": "./icon.png", "dark": "./icon.png" }
+        "extensions": [
+          ".struktolab"
+        ],
+        "aliases": [
+          "StruktoLab"
+        ],
+        "icon": {
+          "light": "./icon.png",
+          "dark": "./icon.png"
+        }
       }
     ],
     "commands": [
