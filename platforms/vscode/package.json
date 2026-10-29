@@ -2,7 +2,7 @@
   "name": "struktolab-studio",
   "displayName": "StruktoLab Studio",
   "description": "Visual editor for .struktolab files — Nassi-Shneiderman structograms",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "publisher": "openpatch",
   "author": "Mike Barkmin",
   "license": "MIT",
