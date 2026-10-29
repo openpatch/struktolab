@@ -39,6 +39,9 @@
       cursor: pointer;
       font-size: 13px;
       font-family: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
     header button:hover { background: rgba(255,255,255,0.2); }
 
@@ -109,7 +112,10 @@
     <img src="/logo.svg" alt="StruktoLab Logo" width="32" height="32" />
     <h1>Strukto<span>Lab</span></h1>
     <div class="spacer"></div>
-    <button id="share-btn" title="Copy shareable URL to clipboard">🔗 Share</button>
+    <button id="share-btn" title="Copy shareable URL to clipboard">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></svg>
+      <span id="share-label">Share</span>
+    </button>
   </header>
 
   <div class="container">

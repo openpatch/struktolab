@@ -166,6 +166,34 @@ const TOOLBAR_ITEMS = [
   { type: "TryCatchNode", label: "Try/Catch", icon: "⚡" },
 ];
 
+/** Emoji look different on every system and are missing on some, so the toolbar draws its own. */
+const ICON_PATHS = {
+  undo: "M9 15 4 10l5-5M4 10h11a5 5 0 0 1 0 10h-3",
+  redo: "M15 15l5-5-5-5M20 10H9a5 5 0 0 0 0 10h3",
+  view: "M4 6h9M17 6h3M15 4v4M4 12h3M11 12h9M9 10v4M4 18h11M19 18h1M17 16v4",
+  save: "M5 3h11l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM7 3v5h8V3M7 21v-7h10v7",
+  load: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
+  png: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM21 15l-5-5L5 21M7.5 9a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0",
+  svg: "M4 17C6 9 18 9 20 17M2.5 17h3v3h-3zM18.5 17h3v3h-3zM6 6h12M10.5 4.5h3v3h-3z",
+};
+
+function icon(name) {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "16");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  const path = document.createElementNS(svgNS, "path");
+  path.setAttribute("d", ICON_PATHS[name]);
+  svg.appendChild(path);
+  return svg;
+}
+
 /* ── CSS ───────────────────────────────────────────────────── */
 
 const STYLES = `
@@ -223,9 +251,9 @@ button {
 }
 
 /* Every icon gets the same box.
-   Left to itself each glyph contributes its own line box — ⚙ is 16px tall, 💾
-   17, ↶ 20, 🖼 22 — so the buttons came out five different heights, with PNG
-   the odd one out. A fixed box means the glyph no longer sets the height. */
+   Left to itself each glyph of the insert menu contributes its own line box,
+   so the buttons came out different heights. A fixed box means the glyph no
+   longer sets the height. */
 button .icon {
   flex: none;
   display: inline-flex;
@@ -739,7 +767,7 @@ class StruktolabEditor extends HTMLElement {
     const iconEl = document.createElement("span");
     iconEl.className = "icon";
     iconEl.setAttribute("aria-hidden", "true");
-    iconEl.textContent = icon;
+    iconEl.append(icon);
     const labelEl = document.createElement("span");
     labelEl.className = "label";
     labelEl.textContent = label;
@@ -768,15 +796,15 @@ class StruktolabEditor extends HTMLElement {
   _buildToolbar() {
     /* History */
     const history = this._group("history");
-    this._undoBtn = this._button("↶", this._t("undo"), this._t("undoTitle"), () => this.undo());
-    this._redoBtn = this._button("↷", this._t("redo"), this._t("redoTitle"), () => this.redo());
+    this._undoBtn = this._button(icon("undo"), this._t("undo"), this._t("undoTitle"), () => this.undo());
+    this._redoBtn = this._button(icon("redo"), this._t("redo"), this._t("redoTitle"), () => this.redo());
     history.append(this._undoBtn, this._redoBtn);
     this._historyGroup = history;
     this._historySep = this._separator();
 
     /* View settings, behind one button */
     const view = this._group("view");
-    const viewBtn = this._button("⚙", this._t("view"), this._t("viewTitle"));
+    const viewBtn = this._button(icon("view"), this._t("view"), this._t("viewTitle"));
     viewBtn.setAttribute("aria-haspopup", "true");
     viewBtn.setAttribute("aria-expanded", "false");
     viewBtn.addEventListener("click", () => this._toggleViewPopover());
@@ -788,10 +816,10 @@ class StruktolabEditor extends HTMLElement {
     /* Files and export */
     const file = this._group("file");
 
-    this._saveBtn = this._button("💾", this._t("save"), this._t("saveTitle"), () =>
+    this._saveBtn = this._button(icon("save"), this._t("save"), this._t("saveTitle"), () =>
       this._downloadJSON(),
     );
-    this._loadBtn = this._button("📂", this._t("load"), this._t("loadTitle"), () =>
+    this._loadBtn = this._button(icon("load"), this._t("load"), this._t("loadTitle"), () =>
       this._triggerLoadJSON(),
     );
     file.append(this._saveBtn, this._loadBtn);
@@ -804,8 +832,8 @@ class StruktolabEditor extends HTMLElement {
     file.appendChild(this._fileInput);
 
     file.append(
-      this._button("🖼", "PNG", this._t("pngTitle"), () => this._downloadImage("png")),
-      this._button("📐", "SVG", this._t("svgTitle"), () => this._downloadImage("svg")),
+      this._button(icon("png"), "PNG", this._t("pngTitle"), () => this._downloadImage("png")),
+      this._button(icon("svg"), "SVG", this._t("svgTitle"), () => this._downloadImage("svg")),
     );
 
     this._updateHistoryButtons();

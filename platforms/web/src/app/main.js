@@ -40,10 +40,10 @@ document.getElementById("share-btn").addEventListener("click", () => {
   if (!hash) return;
   const url = window.location.origin + window.location.pathname + "#" + hash;
   navigator.clipboard.writeText(url).then(() => {
-    const btn = document.getElementById("share-btn");
-    const orig = btn.textContent;
-    btn.textContent = "✓ Copied!";
-    setTimeout(() => { btn.textContent = orig; }, 2000);
+    const label = document.getElementById("share-label");
+    const orig = label.textContent;
+    label.textContent = "✓ Copied!";
+    setTimeout(() => { label.textContent = orig; }, 2000);
   });
 });
 
