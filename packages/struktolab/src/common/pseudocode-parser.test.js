@@ -15,3 +15,14 @@ test("keeps the body of a line it does not understand", () => {
   const out = roundTrip('while x > 0:\n    x = x - 1\n    output("x")\ny = 1');
   assert.equal(out, 'while x > 0:\nx = x - 1\noutput("x")\ny = 1');
 });
+
+test("keeps an index at the end of a condition", () => {
+  const code = "switch notes[0]:\n    case 1:\n        y = 1";
+  assert.equal(roundTrip(code), code);
+});
+
+test("reads column widths after the condition", () => {
+  const tree = parsePseudocode("if a[0] > 1 [0.7, 0.3]:\n    y = 1\nelse:\n    y = 2", KEYWORDS_EN);
+  assert.equal(tree.followElement.text, "a[0] > 1");
+  assert.deepEqual(tree.followElement.columnWidths, [0.7, 0.3]);
+});

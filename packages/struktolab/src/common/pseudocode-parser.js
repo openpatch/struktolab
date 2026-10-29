@@ -114,7 +114,7 @@ function placeholder() {
  *      "x > 0"             → { text: "x > 0", columnWidths: null }
  */
 function extractColumnWidths(str) {
-  const match = str.match(/^(.*?)\s*\[([0-9.,\s]+)\]\s*$/);
+  const match = str.match(/^(.*?)\s+\[([0-9.,\s]+)\]\s*$/);
   if (match) {
     const text = match[1].trim();
     const widths = match[2].split(",").map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
