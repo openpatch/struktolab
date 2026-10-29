@@ -16,8 +16,9 @@ const TRANSLATIONS = {
     HeadLoopNode: { pre: "while ", post: ":\n" },
     FootLoopNode: {
       prepre: "while True:\n",
-      pre: "    if not ",
-      post: ":\n        break\n",
+      pre: "if not ",
+      post: ":\n",
+      postpost: "break\n",
     },
     FunctionNode: { pre: "def ", between: "(", post: "):\n" },
     CaseNode: { pre: "if ", post: ":\n" },
@@ -228,8 +229,9 @@ function transform(node, level, t, lang) {
       if (t.pseudoSwitch) {
         // Python: the pre/post contain the break logic
         lines.push(
-          indent(level) + t.FootLoopNode.pre + text + t.FootLoopNode.post,
+          indent(level + 1) + t.FootLoopNode.pre + text + t.FootLoopNode.post,
         );
+        lines.push(indent(level + 2) + t.FootLoopNode.postpost);
       } else {
         if (t.rightBracket) lines.push(indent(level) + t.rightBracket + " ");
         lines.push(t.FootLoopNode.pre + text + t.FootLoopNode.post);
