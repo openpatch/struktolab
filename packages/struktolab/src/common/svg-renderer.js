@@ -1,3 +1,5 @@
+import { KEYWORDS_DE } from "./pseudocode-parser.js";
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 const COLORS = {
@@ -52,6 +54,7 @@ const COLORS = {
 };
 
 let COLOR_MODE = "color";
+let KEYWORDS = KEYWORDS_DE;
 
 function getColor(nodeType) {
   return COLORS[COLOR_MODE](nodeType);
@@ -457,11 +460,11 @@ function renderNode(node, x, y, width, fontSize, availH) {
       // True/False labels below slopes
       const smallFS = fontSize * 0.8;
       elements.push(
-        textEl("Wahr", x + PADDING_X, slopeBottom, labelRowH, smallFS, null),
+        textEl(KEYWORDS.true, x + PADDING_X, slopeBottom, labelRowH, smallFS, null),
       );
       elements.push(
         textEl(
-          "Falsch",
+          KEYWORDS.false,
           x + width - PADDING_X,
           slopeBottom,
           labelRowH,
@@ -926,6 +929,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
  * @param {number} [options.width=600] - SVG coordinate width (used for layout calculations)
  * @param {number} [options.fontSize=14] - Font size in px
  * @param {string} [options.colorMode] - "color" (default) or "bw" for black-and-white colors
+ * @param {Object} [options.keywords=KEYWORDS_DE] - Keyword map for the true/false labels
  * @returns {SVGSVGElement}
  */
 export function renderStructogramSVG(tree, options = {}) {
@@ -934,6 +938,7 @@ export function renderStructogramSVG(tree, options = {}) {
   if (options.colorMode && COLORS[options.colorMode]) {
     COLOR_MODE = options.colorMode;
   }
+  KEYWORDS = options.keywords || KEYWORDS_DE;
 
   const totalHeight = measureHeight(tree, fontSize, width);
   const h = totalHeight || 40;

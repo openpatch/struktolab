@@ -1044,7 +1044,7 @@ class StruktolabEditor extends HTMLElement {
     // moment a move starts used to grow the diagram and slide the node out
     // from under the pointer, which is the one thing a drag must not do.
     setInsertNodeHeight(0);
-    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode });
+    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode, keywords: this._getKeywords() });
 
     svg.setAttribute("role", "group");
     svg.setAttribute("aria-label", this._t("structogram"));
@@ -2713,7 +2713,7 @@ class StruktolabEditor extends HTMLElement {
 
     // Render a clean SVG (no insert-node space, no overlays)
     setInsertNodeHeight(0);
-    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode });
+    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode, keywords: this._getKeywords() });
     setInsertNodeHeight(0);
 
     const serializer = new XMLSerializer();

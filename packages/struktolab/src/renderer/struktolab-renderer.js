@@ -179,7 +179,7 @@ class StruktolabRenderer extends HTMLElement {
       this._container.removeChild(this._container.firstChild);
     }
 
-    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode });
+    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode, keywords: this._getKeywords() });
     this._container.appendChild(svg);
   }
 }
