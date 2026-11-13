@@ -311,6 +311,7 @@ function _wrapChain(node) {
 
   // Already an InsertNode — ensure its follow chain is wrapped
   if (node.type === "InsertNode") {
+    skipDoubleSlots(node);
     node.followElement = node.followElement ? _wrapContent(node.followElement) : { id: genId(), type: "Placeholder" };
     return node;
   }
@@ -325,9 +326,20 @@ function _wrapChain(node) {
   return { id: genId(), type: "InsertNode", followElement: wrapped };
 }
 
+/**
+ * Two slots in a row mean the same place twice — moving a node out can leave
+ * that behind. The editor opens every slot into a visible gap, so keep one.
+ */
+function skipDoubleSlots(node) {
+  while (node.followElement && node.followElement.type === "InsertNode") {
+    node.followElement = node.followElement.followElement;
+  }
+}
+
 function _wrapContent(node) {
   if (!node) return { id: genId(), type: "Placeholder" };
   if (node.type === "InsertNode") {
+    skipDoubleSlots(node);
     node.followElement = node.followElement ? _wrapContent(node.followElement) : { id: genId(), type: "Placeholder" };
     return node;
   }

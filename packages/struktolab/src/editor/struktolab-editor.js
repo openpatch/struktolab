@@ -1,4 +1,8 @@
-import { renderStructogramSVG, setInsertNodeHeight } from "../common/svg-renderer.js";
+import {
+  renderStructogramSVG,
+  setInsertNodeHeight,
+  setEmptyBranchHeight,
+} from "../common/svg-renderer.js";
 import {
   parsePseudocode,
   KEYWORDS_DE,
@@ -23,10 +27,17 @@ import {
 
 /* ── Constants ─────────────────────────────────────────────── */
 
-const INSERT_COLOR = "rgba(1, 116, 96, 0.28)";
 /** The seam marker has to read as a control, so it is solid rather than a tint. */
 const INSERT_LINE_COLOR = "rgb(1, 116, 96)";
-const INSERT_HEIGHT = 20;
+/**
+ * Height of a slot while something is being placed: the diagram opens a real
+ * gap at every place it can go, each a block with a "+" in it.
+ */
+const INSERT_HEIGHT =
+  typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? 44 : 30;
+/** Body height of an if/else whose branches are both empty. */
+const EMPTY_BRANCH_HEIGHT =
+  typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? 56 : 40;
 
 /** Deep enough to undo a session's worth of mistakes, bounded so it can't grow forever. */
 const HISTORY_LIMIT = 100;
@@ -65,7 +76,17 @@ const UI_STRINGS = {
     insertNode: "{label} einfügen",
     deleteNode: "Diesen Knoten löschen",
     moveNode: "Diesen Knoten verschieben",
+    insertAfter: "Danach einfügen",
+    addCase: "+ Fall",
+    addCaseTitle: "Einen Fall hinzufügen",
     moveHere: "Hierher verschieben",
+    placeHere: "Hier einfügen",
+    paletteLabel: "Blöcke",
+    paletteItemTitle: "{label}: ins Struktogramm ziehen, oder auswählen und dann die Stelle wählen",
+    paletteHint: "Block ins Struktogramm ziehen – oder auswählen und dann die Stelle wählen.",
+    placeHint: "Wähle die Stelle, an die „{label}“ soll.",
+    moveHint: "Wähle die neue Stelle für den Block.",
+    cancel: "Abbrechen",
     parseError: "Syntaxfehler: ",
     nodeLabels: {
       TaskNode: "Anweisung",
@@ -121,7 +142,17 @@ const UI_STRINGS = {
     insertNode: "Insert {label}",
     deleteNode: "Delete this node",
     moveNode: "Move this node",
+    insertAfter: "Insert after this node",
+    addCase: "+ Case",
+    addCaseTitle: "Add a case",
     moveHere: "Move here",
+    placeHere: "Insert here",
+    paletteLabel: "Blocks",
+    paletteItemTitle: "{label}: drag into the diagram, or pick it and then pick the place",
+    paletteHint: "Drag a block into the diagram – or pick it, then pick where it goes.",
+    placeHint: "Pick where the {label} should go.",
+    moveHint: "Pick the new place for the block.",
+    cancel: "Cancel",
     parseError: "Parse error: ",
     nodeLabels: {
       TaskNode: "Task",
@@ -330,6 +361,28 @@ input[type="number"] { width: 60px; }
 
 .editor-area svg { cursor: default; }
 .editor-area.mode-move svg { cursor: crosshair; }
+
+/* The blocks. Drag one into the diagram, or tap it and then tap a place. */
+.palette {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 8px;
+  background: var(--toolbar-bg);
+  border-left: 1px solid var(--toolbar-border);
+  border-right: 1px solid var(--toolbar-border);
+  border-bottom: 1px solid var(--toolbar-border);
+}
+.palette .blocks { display: flex; flex-wrap: wrap; gap: 4px; }
+/* A finger dragging a block must not scroll the page instead. */
+.palette .blocks button { touch-action: none; cursor: grab; }
+.palette .blocks button.active { cursor: pointer; }
+.palette .hint { font-size: 12px; color: #555; flex: 1 1 200px; }
+@media (pointer: coarse) {
+  .palette .blocks button { min-height: 40px; padding: 6px 12px; font-size: 14px; }
+  .palette .cancel { min-height: 40px; }
+}
 .editor-area.resizing, .editor-area.resizing svg { cursor: col-resize !important; }
 .editor-area:focus { outline: none; }
 
@@ -380,6 +433,10 @@ input[type="number"] { width: 60px; }
 }
 .type-menu button { justify-content: flex-start; width: 100%; }
 .type-menu .label { display: inline !important; }
+@media (pointer: coarse) {
+  .type-menu { gap: 6px; padding: 8px; }
+  .type-menu button { min-height: 44px; font-size: 15px; }
+}
 
 .text-overlay {
   position: absolute;
@@ -472,7 +529,7 @@ class StruktolabEditor extends HTMLElement {
     super();
     this._tree = null;
     this._keywords = null;
-    this._mode = null; // null | "insert:TYPE" | "delete" | "move:ID"
+    this._mode = null; // null | "place:TYPE" | "move:ID"
     this._syncing = false; // guard against circular updates
     this._debounceTimer = null;
 
@@ -500,6 +557,12 @@ class StruktolabEditor extends HTMLElement {
     this._toolbar.className = "toolbar";
     this._buildToolbar();
     this._shadow.appendChild(this._toolbar);
+
+    // Block palette: where adding starts
+    this._palette = document.createElement("div");
+    this._palette.className = "palette";
+    this._buildPalette();
+    this._shadow.appendChild(this._palette);
 
     // Editor area
     this._editorArea = document.createElement("div");
@@ -840,6 +903,81 @@ class StruktolabEditor extends HTMLElement {
   }
 
   /**
+   * The blocks. Drag one into the diagram, or tap it and then tap the place.
+   * It sits on its own row under the toolbar: this is where adding starts, so
+   * it must be visible without hunting for it.
+   */
+  _buildPalette() {
+    const palette = this._palette;
+    palette.replaceChildren();
+    palette.setAttribute("role", "toolbar");
+    palette.setAttribute("aria-label", this._t("paletteLabel"));
+
+    const blocks = document.createElement("div");
+    blocks.className = "blocks";
+    this._paletteButtons = new Map();
+    for (const item of TOOLBAR_ITEMS) {
+      const label = this._t("toolbarLabels")[item.type] ?? item.label;
+      const btn = this._button(item.icon, label, this._t("paletteItemTitle").replace("{label}", label));
+      btn.dataset.type = item.type;
+      btn.setAttribute("aria-pressed", "false");
+
+      btn.addEventListener("pointerdown", (e) => {
+        if (e.button !== undefined && e.button !== 0) return;
+        e.preventDefault();
+        if (this._mode === "place:" + item.type) {
+          this._setMode(null);
+          return;
+        }
+        this._startCarry("place:" + item.type, label, e);
+      });
+      // Pointer presses are handled above; this is the keyboard's way in.
+      btn.addEventListener("click", (e) => {
+        if (e.detail !== 0) return;
+        if (this._mode === "place:" + item.type) {
+          this._setMode(null);
+          return;
+        }
+        this._keyboardMove = true;
+        this._startCarry("place:" + item.type, label);
+      });
+      blocks.appendChild(btn);
+      this._paletteButtons.set(item.type, btn);
+    }
+
+    const hint = document.createElement("span");
+    hint.className = "hint";
+    hint.setAttribute("aria-live", "polite");
+    this._paletteHint = hint;
+
+    const cancel = this._button("✕", this._t("cancel"), this._t("cancel"), () => this._setMode(null));
+    cancel.className = "cancel";
+    this._paletteCancel = cancel;
+
+    palette.append(blocks, hint, cancel);
+    this._updatePalette();
+  }
+
+  _updatePalette() {
+    if (!this._paletteButtons) return;
+    const mode = this._mode || "";
+    const placing = mode.startsWith("place:") ? mode.slice("place:".length) : null;
+    for (const [type, btn] of this._paletteButtons) {
+      btn.classList.toggle("active", type === placing);
+      btn.setAttribute("aria-pressed", String(type === placing));
+    }
+    let hint = this._t("paletteHint");
+    if (placing) {
+      const label = this._t("toolbarLabels")[placing] ?? placing;
+      hint = this._t("placeHint").replace("{label}", label);
+    } else if (mode.startsWith("move:")) {
+      hint = this._t("moveHint");
+    }
+    this._paletteHint.textContent = hint;
+    this._paletteCancel.style.display = mode ? "" : "none";
+  }
+
+  /**
    * Build the toolbar again from scratch. The labels only depend on the
    * `lang` attribute, so this is where a language change lands.
    */
@@ -848,6 +986,7 @@ class StruktolabEditor extends HTMLElement {
     this._toolbar.replaceChildren();
     this._buildToolbar();
     this._applyEmbedded();
+    if (this._palette) this._buildPalette();
   }
 
   _buildViewPopover() {
@@ -1031,13 +1170,14 @@ class StruktolabEditor extends HTMLElement {
     if (!mode) {
       // Putting the node down — drop the slot bookkeeping, and the ghost with
       // it if this was an Escape in the middle of a drag.
-      this._moveSlots = [];
+      this._slots = [];
       this._activeSlot = null;
       if (this._drag) {
         this._drag.ghost.remove();
         this._drag = null;
       }
     }
+    this._updatePalette();
     this._render();
   }
 
@@ -1068,11 +1208,30 @@ class StruktolabEditor extends HTMLElement {
     const hadFocus = oldSvg ? oldSvg.contains(this._shadow.activeElement) : false;
     if (oldSvg) oldSvg.remove();
 
-    // Slots never take up space of their own. Reserving room for them the
-    // moment a move starts used to grow the diagram and slide the node out
-    // from under the pointer, which is the one thing a drag must not do.
+    // While something is being placed, every slot opens up into a block of
+    // its own. The renderer reports where each one landed — the editor does
+    // not guess, so a target can never sit beside the gap it stands for.
+    const carrying = Boolean(this._mode);
+    setInsertNodeHeight(carrying ? INSERT_HEIGHT : 0);
+    setEmptyBranchHeight(EMPTY_BRANCH_HEIGHT);
+    this._slotLayout = new Map();
+    this._closedSlots = this._unusableSlots();
+    const svg = renderStructogramSVG(this._tree, {
+      width,
+      fontSize,
+      colorMode,
+      keywords: this._getKeywords(),
+      layout: this._slotLayout,
+      closedSlots: this._closedSlots,
+    });
+    setEmptyBranchHeight(0);
     setInsertNodeHeight(0);
-    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode, keywords: this._getKeywords() });
+    // Room under the diagram for the "add at the end" place. Not part of the
+    // diagram itself, so exports leave it out.
+    const vb = svg.viewBox.baseVal;
+    if (!carrying && this._tree?.followElement?.type !== "Placeholder") {
+      svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.width} ${vb.height + this._tailHeight()}`);
+    }
 
     svg.setAttribute("role", "group");
     svg.setAttribute("aria-label", this._t("structogram"));
@@ -1093,23 +1252,23 @@ class StruktolabEditor extends HTMLElement {
     // is in the document nothing inside it can take focus.
     if (this._keyboardMove) {
       this._keyboardMove = false;
-      this._moveSlots?.[0]?.element.focus({ preventScroll: true });
+      this._slots?.[0]?.element.focus({ preventScroll: true });
     }
   }
 
   _addInteractivity(svg, width, fontSize) {
-    const isMove = this._mode && this._mode.startsWith("move:");
+    const carrying = Boolean(this._mode);
 
-    if (isMove) {
-      this._addMoveTargets(svg, width, fontSize, this._mode.replace("move:", ""));
-      // Pressing anywhere that is not a slot puts the node back down.
+    if (carrying) {
+      this._addSlotTargets(svg, width, fontSize);
+      // Pressing anywhere that is not a slot puts the carried thing down.
       //
       // This listens for pointerdown, not click: arming the move re-renders,
       // which removes the grip mid-gesture, and the click that gesture goes on
       // to produce is retargeted onto this very SVG — cancelling the move the
       // instant it began. A pointerdown can only belong to a later gesture.
       svg.addEventListener("pointerdown", (e) => {
-        const onSlot = (this._moveSlots || []).some((slot) =>
+        const onSlot = (this._slots || []).some((slot) =>
           e.composedPath().includes(slot.element),
         );
         if (!onSlot) this._setMode(null);
@@ -1118,10 +1277,10 @@ class StruktolabEditor extends HTMLElement {
     }
 
     // Order is hit-testing order: the node layer covers whole nodes and goes in
-    // first, then the thin insert strips over the seams between them, then the
-    // small handles and buttons last so they always win the click.
+    // first, then the "+" in empty places, then the small handles and buttons
+    // last so they always win the click.
     this._addNodeTargets(svg, width, fontSize);
-    this._addQuickInsertTargets(svg, width, fontSize);
+    this._addEmptySlotTargets(svg);
     this._addResizeHandles(svg, width, fontSize);
     this._addCaseButtons(svg, width, fontSize);
   }
@@ -1254,7 +1413,9 @@ class StruktolabEditor extends HTMLElement {
           layout,
           withInsertSpace,
         );
-        const maxChildH = Math.max(trueH, falseH);
+        // Both branches empty would leave no body at all, and so nothing to
+        // tap to put the first node into either branch.
+        const maxChildH = Math.max(trueH, falseH, EMPTY_BRANCH_HEIGHT);
         const totalH = headerH + maxChildH;
         if (node.id)
           layout.set(node.id, {
@@ -1529,98 +1690,87 @@ class StruktolabEditor extends HTMLElement {
     // No-op for now — positions come from _computeLayout
   }
 
+  /** Nesting depth of every slot, and whether it ends its column. */
+  _slotInfo(node, depth = 0, info = new Map()) {
+    // A case column starts with its label (InsertCase), which is not content:
+    // a slot right after it is still the only thing in the column.
+    let content = false;
+    for (let n = node; n; n = n.followElement) {
+      if (n.type === "InsertNode" && n.id) {
+        const f = n.followElement;
+        const trailing = !f || f.type === "Placeholder";
+        info.set(n.id, { depth, trailing, alone: trailing && !content });
+      } else if (n.type !== "InsertCase" && n.type !== "Placeholder") {
+        content = true;
+      }
+      for (const key of ["trueChild", "falseChild", "child", "tryChild", "catchChild", "defaultNode"]) {
+        if (n[key]) this._slotInfo(n[key], depth + 1, info);
+      }
+      for (const c of n.cases || []) this._slotInfo(c, depth + 1, info);
+    }
+    return info;
+  }
+
   /* ── Insert targets ─────────────────────────────────────── */
 
 
-  /* ── Quick insert (no mode required) ────────────────────── */
+  /* ── Empty places, always visible ───────────────────────── */
 
   /**
-   * A thin strip on every seam between two nodes.
-   *
-   * Picking a type from the toolbar first and then aiming at a slot works, but
-   * it makes the slots invisible until you have already committed to a type.
-   * These strips run the other way round: point at the place, then choose.
+   * An empty diagram, an empty branch, an empty loop body: places that have
+   * nothing in them to point at. Each gets a quiet "+" that is always there —
+   * hover cannot be relied on, a finger has none — and opens the block menu.
    */
-  _addQuickInsertTargets(svg, width, fontSize) {
-    const layout = this._computeLayout(this._tree, 0, 0, width, fontSize, false);
+  _addEmptySlotTargets(svg) {
     const svgNS = "http://www.w3.org/2000/svg";
-    const BAND = this._coarsePointer ? 22 : 12;
-    const LINE = 5;
-    const BADGE_R = 11;
-
-    const entries = [...layout.entries()].filter(
-      ([, box]) => box.type === "InsertNode",
-    );
-    const empty = !this._focusOrder || this._focusOrder.length === 0;
-
-    for (const [id, box] of entries) {
-      const y = box.y + box.h / 2 - BAND / 2;
-
-      const group = document.createElementNS(svgNS, "g");
-      group.style.cursor = "pointer";
-
-      const hit = document.createElementNS(svgNS, "rect");
-      hit.setAttribute("x", box.x + 2);
-      hit.setAttribute("y", y);
-      hit.setAttribute("width", Math.max(box.w - 4, 1));
-      hit.setAttribute("height", BAND);
-      hit.setAttribute("fill", "transparent");
-
-      // The visible half: a solid bar with a round "+" badge on it, drawn only
-      // while the pointer is over the seam.
-      const centreY = box.y + box.h / 2;
-
-      const line = document.createElementNS(svgNS, "rect");
-      line.setAttribute("x", box.x + 2);
-      line.setAttribute("y", centreY - LINE / 2);
-      line.setAttribute("width", Math.max(box.w - 4, 1));
-      line.setAttribute("height", LINE);
-      line.setAttribute("rx", LINE / 2);
-      line.setAttribute("fill", "transparent");
-      line.setAttribute("pointer-events", "none");
-      line.style.transition = "fill 0.12s";
-
-      const badge = document.createElementNS(svgNS, "circle");
-      badge.setAttribute("cx", box.x + box.w / 2);
-      badge.setAttribute("cy", centreY);
-      badge.setAttribute("r", BADGE_R);
-      badge.setAttribute("fill", "transparent");
-      badge.setAttribute("pointer-events", "none");
-      badge.style.transition = "fill 0.12s";
-
-      const plus = document.createElementNS(svgNS, "text");
-      plus.setAttribute("x", box.x + box.w / 2);
-      plus.setAttribute("y", centreY);
-      plus.setAttribute("text-anchor", "middle");
-      plus.setAttribute("dominant-baseline", "central");
-      plus.setAttribute("font-size", "17");
-      plus.setAttribute("font-weight", "bold");
-      plus.setAttribute("fill", "transparent");
-      plus.setAttribute("pointer-events", "none");
-      plus.style.transition = "fill 0.12s";
-      plus.textContent = "+";
-
-      const show = (on) => {
-        line.setAttribute("fill", on ? INSERT_LINE_COLOR : "transparent");
-        badge.setAttribute("fill", on ? INSERT_LINE_COLOR : "transparent");
-        plus.setAttribute("fill", on ? "#fff" : "transparent");
-      };
-      // An empty structogram has nothing to hover over, so its one slot has to
-      // announce itself — otherwise there is no way in at all.
-      if (empty) {
-        show(true);
-      } else {
-        group.addEventListener("mouseenter", () => show(true));
-        group.addEventListener("mouseleave", () => show(false));
-      }
+    for (const zone of this._slotZones()) {
+      const { group, hit, setActive } = this._slotBlock(svgNS, zone);
+      hit.setAttribute("aria-label", this._t("insertHere"));
+      group.addEventListener("mouseenter", () => setActive(true));
+      group.addEventListener("mouseleave", () => setActive(false));
       group.addEventListener("click", (e) => {
         e.stopPropagation();
-        this._showTypeMenu(id, box);
+        this._showTypeMenu(zone.id, { x: zone.x, y: zone.top, w: zone.w, h: zone.bottom - zone.top });
       });
-
-      group.append(hit, line, badge, plus);
       svg.appendChild(group);
     }
+  }
+
+  /** One place to put something: a dashed block with a "+" in the middle. */
+  _slotBlock(svgNS, zone) {
+    const group = document.createElementNS(svgNS, "g");
+    group.style.cursor = "pointer";
+
+    const block = document.createElementNS(svgNS, "rect");
+    block.setAttribute("x", zone.x + 3);
+    block.setAttribute("y", zone.top + 3);
+    block.setAttribute("width", Math.max(zone.w - 6, 1));
+    block.setAttribute("height", Math.max(zone.bottom - zone.top - 6, 1));
+    block.setAttribute("rx", 4);
+    block.setAttribute("stroke", INSERT_LINE_COLOR);
+    block.setAttribute("pointer-events", "none");
+    block.style.transition = "fill 0.1s";
+
+    const badge = this._plusBadge(svgNS, zone.x + zone.w / 2, (zone.top + zone.bottom) / 2);
+
+    const hit = document.createElementNS(svgNS, "rect");
+    hit.setAttribute("x", zone.x);
+    hit.setAttribute("y", zone.top);
+    hit.setAttribute("width", Math.max(zone.w, 1));
+    hit.setAttribute("height", Math.max(zone.bottom - zone.top, 1));
+    hit.setAttribute("fill", "transparent");
+    hit.setAttribute("role", "button");
+
+    const setActive = (on) => {
+      block.setAttribute("fill", on ? "rgba(1, 116, 96, 0.30)" : "rgba(1, 116, 96, 0.07)");
+      block.setAttribute("stroke-width", on ? "2" : "1");
+      block.setAttribute("stroke-dasharray", on ? "none" : "5 4");
+      badge.set(on ? "active" : "idle");
+    };
+    setActive(false);
+
+    group.append(block, badge.element, hit);
+    return { group, hit, setActive };
   }
 
   /**
@@ -1711,9 +1861,18 @@ class StruktolabEditor extends HTMLElement {
   /** Put a new node of `type` into the slot `targetId` and select it. */
   _insertType(targetId, type) {
     this._pushHistory();
-    this._tree = this._prepTree(insertAt(this._tree, targetId, type));
+    const tree = insertAt(this._tree, targetId, type);
+    const created = findNode(tree, targetId)?.followElement;
+    this._tree = this._prepTree(tree);
     this._setMode(null);
     this._onTreeChange();
+    // A new node is almost always followed by typing its text, so go straight
+    // there instead of making the user find and double-tap it first.
+    const box = created?.id && this._boxes?.get(created.id);
+    if (box) {
+      this._setFocusedNode(created.id);
+      this._showEditOverlay(created.id, box);
+    }
   }
 
   /* ── Delete targets ─────────────────────────────────────── */
@@ -1772,9 +1931,21 @@ class StruktolabEditor extends HTMLElement {
       // Roving tabindex: one stop for the whole diagram, arrows move within it.
       rect.setAttribute("tabindex", id === this._focusedId ? "0" : "-1");
 
+      // Older Safari hands click a MouseEvent without pointerType, so remember
+      // what the press itself was.
+      let pressedWith = "mouse";
+      rect.addEventListener("pointerdown", (e) => {
+        pressedWith = e.pointerType;
+      });
       rect.addEventListener("click", (e) => {
         e.stopPropagation();
+        // Touch has no reliable double-tap: the first tap selects the node,
+        // a second tap on the selected node edits it.
+        const wasSelected = this._shadow.activeElement === rect;
         rect.focus();
+        if (wasSelected && pressedWith !== "mouse") {
+          this._showEditOverlay(id, box);
+        }
       });
       rect.addEventListener("dblclick", (e) => {
         e.stopPropagation();
@@ -1814,20 +1985,23 @@ class StruktolabEditor extends HTMLElement {
   _nodeActions(svgNS, id, box) {
     const size = this._coarsePointer ? 26 : 16;
     const gap = 3;
-    const top = box.y + 3;
+    // A do-while has its condition at the bottom, and the top-right corner
+    // belongs to the first node of its body — buttons there would be covered
+    // by that node's own, so the loop's go into its footer row instead.
+    const top = box.type === "FootLoopNode" ? box.y + box.h - size - 3 : box.y + 3;
     const right = box.x + box.w - 3;
 
     const actions = document.createElementNS(svgNS, "g");
     actions.style.transition = "opacity 0.12s";
 
-    const button = (x, glyph, colour, label, onActivate) => {
+    const button = (x, glyph, colour, label, onActivate, w = size) => {
       const g = document.createElementNS(svgNS, "g");
       g.style.cursor = "pointer";
 
       const bg = document.createElementNS(svgNS, "rect");
       bg.setAttribute("x", x);
       bg.setAttribute("y", top);
-      bg.setAttribute("width", size);
+      bg.setAttribute("width", w);
       bg.setAttribute("height", size);
       bg.setAttribute("rx", 3);
       bg.setAttribute("fill", "rgba(255,255,255,0.85)");
@@ -1835,7 +2009,7 @@ class StruktolabEditor extends HTMLElement {
       bg.setAttribute("stroke-width", "1");
 
       const text = document.createElementNS(svgNS, "text");
-      text.setAttribute("x", x + size / 2);
+      text.setAttribute("x", x + w / 2);
       text.setAttribute("y", top + size / 2);
       text.setAttribute("text-anchor", "middle");
       text.setAttribute("dominant-baseline", "central");
@@ -1859,16 +2033,26 @@ class StruktolabEditor extends HTMLElement {
     };
 
     // Delete on the right, where a close button belongs; drag to its left.
+    // Pressing a button must not blur the node first: the blur hides the
+    // buttons, and the click would then land on nothing.
+    const keepFocus = (g) =>
+      g.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+      });
+
     const del = button(
       right - size,
       "✕",
       "rgb(192, 57, 43)",
       this._t("deleteNode"),
-      (g) =>
+      (g) => {
+        keepFocus(g);
         g.addEventListener("click", (e) => {
           e.stopPropagation();
           this._deleteNode(id);
-        }),
+        });
+      },
     );
 
     const drag = button(
@@ -1886,7 +2070,46 @@ class StruktolabEditor extends HTMLElement {
       },
     );
 
-    actions.append(drag, del);
+    // The seams are hover-only and thin; this is the way in that works the
+    // same with a finger: tap the node, then "+".
+    const add = button(
+      right - size * 3 - gap * 2,
+      "+",
+      "rgb(1, 116, 96)",
+      this._t("insertAfter"),
+      (g) => {
+        keepFocus(g);
+        g.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this._openInsertAfter(id, box);
+        });
+      },
+    );
+
+    actions.append(add, drag, del);
+
+    // A switch also grows sideways: one more case. Spelled out, so it is not
+    // mistaken for the "+" next to it that adds a block after the switch.
+    if (box.type === "CaseNode") {
+      const text = this._t("addCase");
+      const w = Math.round(text.length * size * 0.42 + size * 0.6);
+      const addCaseBtn = button(
+        right - size * 3 - gap * 3 - w,
+        text,
+        "rgb(1, 116, 96)",
+        this._t("addCaseTitle"),
+        (g) => {
+          keepFocus(g);
+          g.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this._commit(addCase(this._tree, id));
+          });
+        },
+        w,
+      );
+      addCaseBtn.querySelector("text").setAttribute("font-size", String(Math.round(size * 0.62)));
+      actions.append(addCaseBtn);
+    }
     return actions;
   }
 
@@ -2101,42 +2324,50 @@ class StruktolabEditor extends HTMLElement {
     }
   }
 
-  /* ── Drag-to-reorder ────────────────────────────────────── */
-
-
-  /* ── Moving a node ──────────────────────────────────────── */
+  /* ── Carrying: adding from the palette and moving a node ─── */
 
   /**
-   * Pick a node up.
+   * Adding and moving are one gesture with two sources. Something is picked
+   * up — a block from the palette, or an existing node by its grip — and put
+   * down on a slot.
    *
-   * With a pointer this becomes a real drag: a ghost follows the finger and the
-   * slot it would land in lights up. Press and release without moving and it
-   * stays picked up instead, so tapping the grip and then tapping a slot works
-   * too — which is the only thing that works from a keyboard.
+   * With a pointer (mouse, pen or finger) it is a real drag: a ghost follows
+   * and the nearest slot lights up. Press and release without moving and the
+   * thing stays picked up instead, every slot shows itself, and a tap on one
+   * puts it there. That second way is what a keyboard gets too.
+   *
+   * @param {string} mode "place:TYPE" or "move:ID"
    */
-  _startDrag(nodeId, event) {
-    this._setMode("move:" + nodeId);
+  _startCarry(mode, label, event) {
+    this._hideTypeMenu();
+    this._hideEditOverlay();
+    this._setMode(mode);
     if (!event || event.pointerId === undefined) return;
 
     const ghost = document.createElement("div");
     ghost.className = "drag-ghost";
-    ghost.textContent = this._nodeLabel(findNode(this._tree, nodeId) ?? { type: "" });
+    ghost.textContent = label;
     this._shadow.appendChild(ghost);
 
-    const drag = { nodeId, ghost, moved: false, startX: event.clientX, startY: event.clientY };
+    const drag = { ghost, moved: false, startX: event.clientX, startY: event.clientY };
     this._drag = drag;
     this._positionGhost(event.clientX, event.clientY);
 
     const onMove = (e) => {
       if (
         !drag.moved &&
-        Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 4
+        Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6
       ) {
         return;
       }
       drag.moved = true;
       ghost.style.display = "block";
       this._positionGhost(e.clientX, e.clientY);
+      // The page cannot scroll under a finger that is dragging, so it scrolls
+      // for it near the edges of the window.
+      const edge = 48;
+      if (e.clientY < edge) window.scrollBy(0, -12);
+      else if (e.clientY > window.innerHeight - edge) window.scrollBy(0, 12);
       this._highlightSlot(this._nearestSlot(e.clientX, e.clientY));
     };
 
@@ -2150,7 +2381,7 @@ class StruktolabEditor extends HTMLElement {
       if (!drag.moved) return; // A tap: stay picked up, wait for the second tap.
       const slot = this._activeSlot;
       this._activeSlot = null;
-      if (slot) this._dropAt(slot.id);
+      if (slot) this._activateSlot(slot.id);
       else this._setMode(null);
     };
 
@@ -2159,16 +2390,21 @@ class StruktolabEditor extends HTMLElement {
     document.addEventListener("pointercancel", onUp);
   }
 
+  _startDrag(nodeId, event) {
+    const node = findNode(this._tree, nodeId) ?? { type: "" };
+    this._startCarry("move:" + nodeId, this._nodeLabel(node), event);
+  }
+
   _positionGhost(clientX, clientY) {
     if (!this._drag) return;
     this._drag.ghost.style.left = clientX + 12 + "px";
     this._drag.ghost.style.top = clientY + 12 + "px";
   }
 
-  /** The slot the pointer is closest to, or null if it is nowhere near one. */
+  /** The slot under the pointer, or the closest one in the same column. */
   _nearestSlot(clientX, clientY) {
     const svg = this._editorArea.querySelector("svg");
-    if (!svg || !this._moveSlots || !this._moveSlots.length) return null;
+    if (!svg || !this._slots || !this._slots.length) return null;
 
     const ctm = svg.getScreenCTM();
     if (!ctm) return null;
@@ -2177,62 +2413,112 @@ class StruktolabEditor extends HTMLElement {
     point.y = clientY;
     const { x, y } = point.matrixTransform(ctm.inverse());
 
+    // On a block: that one. Otherwise the closest block, preferring the ones
+    // in the column the pointer is in.
     let best = null;
     let bestScore = Infinity;
-    for (const slot of this._moveSlots) {
-      const { box } = slot;
-      const centreY = box.y + box.h / 2;
-      // Vertical distance decides; being in the wrong column is a tie-breaker,
-      // so a nested slot wins over the outer one at the same height.
-      const outside = x < box.x || x > box.x + box.w;
-      const score = Math.abs(y - centreY) + (outside ? 1000 : 0);
+    for (const slot of this._slots) {
+      const { zone } = slot;
+      const dx = x < zone.x ? zone.x - x : x > zone.x + zone.w ? x - zone.x - zone.w : 0;
+      const dy = y < zone.top ? zone.top - y : y > zone.bottom ? y - zone.bottom : 0;
+      const score = dy + dx * 4;
       if (score < bestScore) {
         bestScore = score;
         best = slot;
       }
     }
-    return best;
+    return bestScore <= 80 ? best : null;
   }
 
   _highlightSlot(slot) {
     if (this._activeSlot === slot) return;
     this._activeSlot = slot;
-    for (const candidate of this._moveSlots || []) {
+    for (const candidate of this._slots || []) {
       candidate.setActive(candidate === slot);
     }
   }
 
-  _dropAt(slotId) {
-    const nodeId = this._mode && this._mode.replace("move:", "");
+  /** Put whatever is being carried into the slot `slotId`. */
+  _activateSlot(slotId) {
+    const mode = this._mode || "";
     this._activeSlot = null;
-    this._moveSlots = [];
-    if (!nodeId) return;
+    this._slots = [];
+    if (mode.startsWith("place:")) {
+      this._insertType(slotId, mode.slice("place:".length));
+      return;
+    }
+    if (!mode.startsWith("move:")) return;
+    const nodeId = mode.slice("move:".length);
     this._pushHistory();
     this._tree = this._prepTree(moveNode(this._tree, nodeId, slotId));
-    this._focusedId = null;
+    this._focusedId = nodeId;
     this._setMode(null);
     this._onTreeChange();
   }
 
   /**
-   * The slots a node can land in, drawn over the diagram rather than carved
-   * into it. Slots inside the node itself are left out — dropping a loop into
-   * its own body is not a move, and used to lose the loop.
+   * The places to put something, as blocks, straight from what the renderer
+   * drew.
+   *
+   * While placing, every slot is its own gap in the diagram, so the blocks
+   * never overlap. The only slot of an empty column takes the whole column.
+   * At rest only the places with nothing in them show: an empty diagram,
+   * empty branches and bodies, and a strip under the diagram for the end.
    */
-  _addMoveTargets(svg, width, fontSize, movingId) {
-    const layout = this._computeLayout(this._tree, 0, 0, width, fontSize, false);
+  _slotZones() {
+    const layout = this._slotLayout || new Map();
+    const info = this._slotInfo(this._tree);
+    const carrying = Boolean(this._mode);
+    const zones = [];
+    for (const [id, b] of layout) {
+      const slot = info.get(id) || { depth: 0, trailing: false, alone: false };
+      const avail = b.avail ?? 0;
+      let h = 0;
+      if (carrying) {
+        h = slot.alone && avail > b.h ? avail : b.h;
+      } else if (slot.alone && slot.depth === 0) {
+        h = EMPTY_BRANCH_HEIGHT;
+      } else if (slot.alone && avail >= 10) {
+        h = avail;
+      } else if (slot.trailing && slot.depth === 0) {
+        h = this._tailHeight();
+      }
+      if (h <= 0) continue;
+      zones.push({ id, x: b.x, w: b.w, top: b.y, bottom: b.y + h, depth: slot.depth });
+    }
+    // Reading order, for the keyboard.
+    return zones.sort((a, b) => a.top - b.top || a.x - b.x);
+  }
+
+  /**
+   * Every slot the carried thing can go to, drawn over the diagram. While
+   * moving, the slots inside the node itself are left out — dropping a loop
+   * into its own body is not a move, and used to lose the loop.
+   */
+  _addSlotTargets(svg, width, fontSize) {
     const svgNS = "http://www.w3.org/2000/svg";
-    const BAND = this._coarsePointer ? 26 : 16;
+    const mode = this._mode || "";
+    const isMove = mode.startsWith("move:");
+    const movingId = isMove ? mode.slice("move:".length) : null;
 
-    const moving = findNode(this._tree, movingId);
-    const excluded = moving ? collectMovedIds(moving) : new Set();
-    const currentSlot = this._slotHolding(this._tree, movingId);
+    const closed = this._closedSlots || new Set();
 
-    this._moveSlots = [];
+    this._slots = [];
     this._activeSlot = null;
 
     // Show what is being carried, so it is never a mystery.
-    const movingBox = layout.get(movingId);
+    // The node sits between the slot in front of it and the one after it, and
+    // the renderer told us where both of those are.
+    let movingBox = null;
+    if (movingId) {
+      const moving = findNode(this._tree, movingId);
+      const before = this._slotLayout.get(this._slotHolding(this._tree, movingId));
+      const after = moving?.followElement && this._slotLayout.get(moving.followElement.id);
+      if (before && after) {
+        const top = before.y + before.h;
+        movingBox = { x: before.x, y: top, w: before.w, h: after.y - top };
+      }
+    }
     if (movingBox) {
       const marker = document.createElementNS(svgNS, "rect");
       marker.setAttribute("x", movingBox.x + 1);
@@ -2248,55 +2534,78 @@ class StruktolabEditor extends HTMLElement {
       svg.appendChild(marker);
     }
 
-    for (const [id, box] of layout) {
-      if (box.type !== "InsertNode") continue;
-      if (excluded.has(id) || id === currentSlot) continue;
+    const zones = this._slotZones().filter((z) => !closed.has(z.id));
+    const label = isMove ? this._t("moveHere") : this._t("placeHere");
 
-      const centreY = box.y + box.h / 2;
-      const group = document.createElementNS(svgNS, "g");
-      group.style.cursor = "pointer";
-
-      const hit = document.createElementNS(svgNS, "rect");
-      hit.setAttribute("x", box.x + 2);
-      hit.setAttribute("y", centreY - BAND / 2);
-      hit.setAttribute("width", Math.max(box.w - 4, 1));
-      hit.setAttribute("height", BAND);
-      hit.setAttribute("fill", "transparent");
-
-      const bar = document.createElementNS(svgNS, "rect");
-      bar.setAttribute("x", box.x + 2);
-      bar.setAttribute("width", Math.max(box.w - 4, 1));
-      bar.setAttribute("pointer-events", "none");
-      bar.style.transition = "fill 0.1s, height 0.1s, y 0.1s";
-
-      const setActive = (on) => {
-        bar.setAttribute("y", centreY - (on ? 4 : 1.5));
-        bar.setAttribute("height", on ? 8 : 3);
-        bar.setAttribute("rx", on ? 4 : 1.5);
-        bar.setAttribute("fill", on ? INSERT_LINE_COLOR : INSERT_COLOR);
-      };
-      setActive(false);
-
+    const elements = new Map();
+    for (const zone of zones) {
+      const { group, hit, setActive } = this._slotBlock(svgNS, zone);
       // The attributes go on the rect, not the group: a <g> is a container and
       // does not take focus, so a tabindex on it would be ignored.
-      hit.setAttribute("role", "button");
-      hit.setAttribute("aria-label", this._t("moveHere"));
-      hit.setAttribute("tabindex", this._moveSlots.length === 0 ? "0" : "-1");
+      hit.setAttribute("aria-label", label);
+      hit.setAttribute("tabindex", "-1");
       hit.addEventListener("focus", () => this._highlightSlot(slot));
       hit.addEventListener("mouseenter", () => this._highlightSlot(slot));
       hit.addEventListener("click", (e) => {
         e.stopPropagation();
-        this._dropAt(id);
+        this._activateSlot(zone.id);
       });
-      hit.addEventListener("keydown", (e) => this._onSlotKeyDown(e, id));
-
-      group.append(hit, bar);
+      hit.addEventListener("keydown", (e) => this._onSlotKeyDown(e, zone.id));
       svg.appendChild(group);
 
-      const slot = { id, box, setActive, element: hit };
-      this._moveSlots.push(slot);
+      const slot = { id: zone.id, zone, setActive, element: hit };
+      elements.set(zone.id, slot);
     }
+    this._slots = zones.map((z) => elements.get(z.id));
+    this._slots[0]?.element.setAttribute("tabindex", "0");
+  }
 
+  /**
+   * While moving: the slots the node cannot go to — inside itself, and right
+   * before or after itself, where it already is. They stay closed.
+   */
+  _unusableSlots() {
+    const mode = this._mode || "";
+    if (!mode.startsWith("move:")) return new Set();
+    const movingId = mode.slice("move:".length);
+    const moving = findNode(this._tree, movingId);
+    if (!moving) return new Set();
+    const closed = new Set(collectMovedIds(moving));
+    const before = this._slotHolding(this._tree, movingId);
+    if (before) closed.add(before);
+    const after = moving.followElement;
+    if (after && after.type === "InsertNode" && after.id) closed.add(after.id);
+    return closed;
+  }
+
+  /** Room under the diagram for adding at the end. */
+  _tailHeight() {
+    return this._coarsePointer ? 48 : 36;
+  }
+
+  /** A round "+" that can be hidden, quiet, or lit. */
+  _plusBadge(svgNS, cx, cy) {
+    const r = this._coarsePointer ? 13 : 10;
+    const g = document.createElementNS(svgNS, "g");
+    g.setAttribute("pointer-events", "none");
+    const circle = document.createElementNS(svgNS, "circle");
+    circle.setAttribute("cx", cx);
+    circle.setAttribute("cy", cy);
+    circle.setAttribute("r", r);
+    const plus = document.createElementNS(svgNS, "path");
+    const a = r * 0.5;
+    plus.setAttribute("d", `M${cx - a} ${cy}H${cx + a}M${cx} ${cy - a}V${cy + a}`);
+    plus.setAttribute("stroke-width", "2.5");
+    plus.setAttribute("stroke-linecap", "round");
+    g.append(circle, plus);
+    return {
+      element: g,
+      set(state) {
+        g.style.display = state === "hidden" ? "none" : "";
+        circle.setAttribute("fill", state === "active" ? INSERT_LINE_COLOR : "rgba(1, 116, 96, 0.15)");
+        plus.setAttribute("stroke", state === "active" ? "#fff" : INSERT_LINE_COLOR);
+      },
+    };
   }
 
   /** The id of the InsertNode that currently holds `nodeId`, if any. */
@@ -2317,11 +2626,11 @@ class StruktolabEditor extends HTMLElement {
   }
 
   _onSlotKeyDown(e, id) {
-    const at = this._moveSlots.findIndex((s) => s.id === id);
+    const at = this._slots.findIndex((s) => s.id === id);
     const focusSlot = (index) => {
-      const slot = this._moveSlots[Math.max(0, Math.min(this._moveSlots.length - 1, index))];
+      const slot = this._slots[Math.max(0, Math.min(this._slots.length - 1, index))];
       if (!slot) return;
-      for (const other of this._moveSlots) {
+      for (const other of this._slots) {
         other.element.setAttribute("tabindex", other === slot ? "0" : "-1");
       }
       slot.element.focus();
@@ -2341,15 +2650,10 @@ class StruktolabEditor extends HTMLElement {
       case "Enter":
       case " ":
         e.preventDefault();
-        this._dropAt(id);
+        this._activateSlot(id);
         return;
     }
   }
-
-  /* ── Move mode targets (shown during drag/move) ─────────── */
-
-  // Move mode uses the same insert target rendering with a different action
-  // When mode is "move:ID", re-render shows insert targets that accept the node
 
   /* ── Case add/delete buttons ────────────────────────────── */
 
@@ -2375,15 +2679,7 @@ class StruktolabEditor extends HTMLElement {
       const slopeH = fontSize * 1.3 + 6;
       const headerH = condH + slopeH;
 
-      // "+" button: add a new case. Sits left of the node's own hover buttons,
-      // which occupy the top-right corner.
-      const actionsW = (this._coarsePointer ? 26 : 16) * 2 + 3 + 3;
-      const addX = box.x + box.w - BTN_SIZE - 4 - actionsW;
-      const addY = box.y + 3;
-      this._createSvgButton(svg, svgNS, addX, addY, BTN_SIZE, BTN_R, "+",
-        "rgba(1,116,96,0.75)", "rgba(1,116,96,1)", () => {
-          this._commit(addCase(this._tree, id));
-        });
+      // Adding a case is one of the switch's own buttons (see _nodeActions).
 
       // "×" buttons on each case column (only if more than 1 case)
       if (node.cases.length > 1) {

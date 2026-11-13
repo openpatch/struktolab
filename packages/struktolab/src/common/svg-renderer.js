@@ -69,6 +69,16 @@ const STROKE_WIDTH = 1.5;
 
 /* ── Editor insert-node spacing (0 by default, set by editor) ──── */
 let _insertNodeHeight = 0;
+/* Where each insert slot ended up, for the editor. Only set while rendering. */
+let _layoutSink = null;
+/* Slots that stay closed even while the editor opens the others. */
+let _closedSlots = null;
+
+/* An if/else with both branches empty has no body; the editor gives it one. */
+let _emptyBranchHeight = 0;
+export function setEmptyBranchHeight(h) {
+  _emptyBranchHeight = h;
+}
 export function setInsertNodeHeight(h) {
   _insertNodeHeight = h;
 }
@@ -207,7 +217,8 @@ function measureHeight(node, fontSize, width) {
   switch (node.type) {
     case "InsertNode":
       return (
-        _insertNodeHeight + measureHeight(node.followElement, fontSize, width)
+        (_closedSlots && _closedSlots.has(node.id) ? 0 : _insertNodeHeight) +
+        measureHeight(node.followElement, fontSize, width)
       );
     case "Placeholder":
       return 0;
@@ -234,7 +245,7 @@ function measureHeight(node, fontSize, width) {
       const falseH = measureHeight(node.falseChild, fontSize, colW[1]);
       return (
         headerH +
-        Math.max(trueH, falseH) +
+        Math.max(trueH, falseH, _emptyBranchHeight) +
         measureHeight(node.followElement, fontSize, width)
       );
     }
@@ -339,7 +350,12 @@ function renderNode(node, x, y, width, fontSize, availH) {
 
   switch (node.type) {
     case "InsertNode": {
-      const inh = _insertNodeHeight;
+      const inh = _closedSlots && _closedSlots.has(node.id) ? 0 : _insertNodeHeight;
+      // `avail` is the room the column gives this slot and what follows it:
+      // for the only slot of an empty column, that is the whole column.
+      if (_layoutSink && node.id) {
+        _layoutSink.set(node.id, { x, y, w: width, h: inh, avail: availH });
+      }
       const sub = renderNode(
         node.followElement,
         x,
@@ -480,7 +496,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
       const trueH = measureHeight(node.trueChild, fontSize, colW[0]);
       const falseH = measureHeight(node.falseChild, fontSize, colW[1]);
       const followH = measureHeight(node.followElement, fontSize, width);
-      const naturalChildH = Math.max(trueH, falseH);
+      const naturalChildH = Math.max(trueH, falseH, _emptyBranchHeight);
       const extraH =
         availH != null && availH > headerH + naturalChildH + followH
           ? availH - headerH - naturalChildH - followH
@@ -680,6 +696,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
         y + rowH,
         innerW,
         fontSize,
+        bodyH,
       );
       elements.push(...childResult.elements);
 
@@ -718,6 +735,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
         y,
         innerW,
         fontSize,
+        bodyH,
       );
       elements.push(...childResult.elements);
 
@@ -790,6 +808,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
         y + rowH,
         innerW,
         fontSize,
+        bodyH,
       );
       elements.push(...childResult.elements);
 
@@ -852,6 +871,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
         y + tryRowH,
         innerW,
         fontSize,
+        tryBodyH,
       );
       elements.push(...tryResult.elements);
 
@@ -898,6 +918,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
         catchY + catchRowH,
         innerW,
         fontSize,
+        catchBodyH,
       );
       elements.push(...catchResult.elements);
 
@@ -952,7 +973,11 @@ export function renderStructogramSVG(tree, options = {}) {
   svg.style.width = "100%";
   svg.style.height = "auto";
 
+  _layoutSink = options.layout || null;
+  _closedSlots = options.closedSlots || null;
   const result = renderNode(tree, 0, 0, width, fontSize);
+  _layoutSink = null;
+  _closedSlots = null;
   for (const el of result.elements) {
     svg.appendChild(el);
   }
