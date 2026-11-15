@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { generateCode } from "./code-generator.js";
 import { parseJava } from "./brace-parser.js";
-import { KEYWORDS_EN } from "./pseudocode-parser.js";
+import { KEYWORDS_EN, parsePseudocode } from "./pseudocode-parser.js";
 import { treeToPseudocode } from "./tree-to-pseudocode.js";
 import { stripInsertNodes } from "./tree-ops.js";
 
@@ -251,4 +251,28 @@ test("the JavaScript generator's output reads back to the same tree", () => {
   const js = "function f(n) {\n  let s = 0\n  for (const x of n) s += x\n  do { s-- } while (s > 10)\n  console.log(s)\n}";
   const tree = parseJavaScript(js);
   assert.deepEqual(stripInsertNodes(parseJavaScript(generateCode(tree, "javascript"))), stripInsertNodes(tree));
+});
+
+test("java.lang.IO: IO.readln is input, IO.println and IO.print are output", () => {
+  const java = `
+    void main() {
+        int n = Integer.parseInt(IO.readln("Zahl: "));
+        String name = IO.readln();
+        IO.print("Hallo ");
+        IO.println(name + " " + n);
+    }`;
+  const tree = stripInsertNodes(parseJava(java));
+  assert.deepEqual(
+    [tree.type, tree.text, tree.followElement.type, tree.followElement.text],
+    ["InputNode", "n", "InputNode", "name"],
+  );
+  const out = tree.followElement.followElement;
+  assert.deepEqual([out.type, out.text, out.followElement.type, out.followElement.text], [
+    "OutputNode", "Hallo ", "OutputNode", 'name + " " + n',
+  ]);
+});
+
+test("the Java generator writes java.lang.IO", () => {
+  const tree = parsePseudocode('input("x")\noutput(x)', KEYWORDS_EN);
+  assert.equal(generateCode(tree, "java"), "x = IO.readln();\nIO.println(x);\n");
 });

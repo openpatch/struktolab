@@ -52,16 +52,13 @@ Full-featured visual editor with toolbar, pseudocode sync, and import/export.
 <!-- From Java, Python or JavaScript: the code area opens in that language -->
 <struktolab-editor font-size="14">
   <script type="text/plain" data-code="java">
-    public class Fakultaet {
-        public static void main(String[] args) {
-            Scanner sc = new Scanner(System.in);
-            int n = sc.nextInt();
-            int f = 1;
-            for (int i = 2; i <= n; i++) {
-                f = f * i;
-            }
-            System.out.println(f);
+    void main() {
+        int n = Integer.parseInt(IO.readln("Zahl n: "));
+        int f = 1;
+        for (int i = 2; i <= n; i++) {
+            f = f * i;
         }
+        IO.println(f);
     }
   </script>
 </struktolab-editor>
@@ -181,7 +178,8 @@ a `.struktolab` file holds and the web app packs into a shareable URL.
 import { serializeDocument, applyDocument, emptyDocument } from 'struktolab/editor';
 
 const doc = serializeDocument(editor);
-// { version: 2, model: {...}, settings: { lang, fontSize, colorMode, scale, codeMode } }
+// { version: 2, model: {...}, settings: { lang, fontSize, colorMode, scale, codeMode },
+//   code?: { lang, text } }   ← the student's own Java/Python/JavaScript, as written
 
 applyDocument(editor, doc);      // → true when a model was loaded
 applyDocument(editor, bareTree); // a plain tree works too, for older files
@@ -216,7 +214,38 @@ Read-only SVG renderer for displaying structograms.
 </struktolab-renderer>
 ```
 
-Same attributes and tree format as the editor.
+Java, Python or JavaScript work the same way. The function headers then read
+like that language, and code that cannot be read shows its error and line in
+place of the diagram:
+
+```html
+<struktolab-renderer lang="de">
+  <script type="text/plain" data-code="java">
+    static int max(int a, int b) {
+        if (a > b) {
+            return a;
+        }
+        return b;
+    }
+  </script>
+</struktolab-renderer>
+```
+
+Same attributes and tree format as the editor, including `code-mode`
+(`pseudocode`, `java`, `python`, `javascript`; taken from `data-code` when not
+set). `src` may point to a JSON tree or a saved `.struktolab` document.
+`element.loadCode(code, lang)` sets the structogram from code.
+
+### Saving a student's work
+
+In a host that keeps the student's state (an LMS, a hyperbook), save and
+restore the whole document rather than just the tree — it also holds the code
+the student typed:
+
+```js
+editor.addEventListener("change", () => store.put(editor.toDocument()));
+editor.fromDocument(await store.get());   // also accepts a bare tree
+```
 
 ## Shareable URLs
 

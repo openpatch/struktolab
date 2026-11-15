@@ -33,8 +33,9 @@ const TRANSLATIONS = {
     pseudoSwitch: true,
   },
   java: {
-    InputNode: { pre: "", post: " = System.console().readLine();\n" },
-    OutputNode: { pre: "System.out.println(", post: ");\n" },
+    // java.lang.IO (Java 25): no Scanner to set up, no System.out to explain.
+    InputNode: { pre: "", post: " = IO.readln();\n" },
+    OutputNode: { pre: "IO.println(", post: ");\n" },
     TaskNode: { pre: "", post: ";\n" },
     BranchNode: { pre: "if (", post: ")", between: "} else {\n" },
     TryCatchNode: { pre: "try", between: "catch (", post: ")" },
@@ -154,6 +155,13 @@ export function generateCode(tree, lang = "python") {
   return transform(tree, 0, t, lang.toLowerCase()).join("");
 }
 
+/** Whether a real block comes after this InsertNode/Placeholder chain link. */
+function hasNext(link) {
+  let n = link;
+  while (n && (n.type === "InsertNode" || n.type === "Placeholder")) n = n.followElement;
+  return Boolean(n);
+}
+
 function body(node, level, t, lang) {
   const lines = transform(node, level, t, lang);
   if (lines.length === 0 && lang === "python") return [indent(level) + "pass\n"];
@@ -175,12 +183,18 @@ function transform(node, level, t, lang) {
       break;
 
     case "InputNode":
-      lines.push(indent(level) + t.InputNode.pre + text + t.InputNode.post);
+    case "OutputNode": {
+      // Read from code in this language and not changed since: write it the
+      // way the student did — `int n = sc.nextInt();`, not a generic read.
+      const o = node.origin;
+      if (o && o.lang === lang && o.text === node.text) {
+        lines.push(indent(level) + o.code + (lang === "python" ? "" : ";") + "\n");
+        break;
+      }
+      const tr = t[node.type];
+      lines.push(indent(level) + tr.pre + text + tr.post);
       break;
-
-    case "OutputNode":
-      lines.push(indent(level) + t.OutputNode.pre + text + t.OutputNode.post);
-      break;
+    }
 
     case "BranchNode": {
       lines.push(
@@ -250,7 +264,12 @@ function transform(node, level, t, lang) {
       const returnType = node.returnType || "";
       // Java names the return type in front, Python may annotate it behind,
       // JavaScript has none.
-      const pre = lang === "java" ? `public ${returnType || "void"} ` : t.FunctionNode.pre;
+      // Java keeps the modifiers it was read with (`static`), new methods are public.
+      const modifiers = node.modifiers ?? "public";
+      const pre =
+        lang === "java"
+          ? `${modifiers ? modifiers + " " : ""}${returnType || "void"} `
+          : t.FunctionNode.pre;
       const post =
         lang === "python" && returnType ? `) -> ${returnType}:\n` : t.FunctionNode.post;
       lines.push(
@@ -264,6 +283,8 @@ function transform(node, level, t, lang) {
       );
       lines.push(...body(node.child, level + 1, t, lang));
       if (t.rightBracket) lines.push(indent(level) + t.rightBracket + "\n");
+      // A blank line between a function and what follows it, as people write it.
+      if (hasNext(node.followElement)) lines.push("\n");
       break;
     }
 

@@ -72,6 +72,8 @@ const STROKE_WIDTH = 1.5;
 let _insertNodeHeight = 0;
 /* Where each insert slot ended up, for the editor. Only set while rendering. */
 let _layoutSink = null;
+/* Where each node ended up, as drawn — stretched to fill its column. Only set while rendering. */
+let _nodeSink = null;
 /* Slots that stay closed even while the editor opens the others. */
 let _closedSlots = null;
 
@@ -341,6 +343,18 @@ function measureHeight(node, fontSize, width) {
  * Returns { elements: SVGElement[], height: number }
  */
 function renderNode(node, x, y, width, fontSize, availH) {
+  const result = renderNodeOnly(node, x, y, width, fontSize, availH);
+  // A node's drawn height is where the next one starts, which the slot after
+  // it has just reported — or, at the end of a column, all that is left.
+  if (_nodeSink && node && node.id && node.type !== "InsertNode" && node.type !== "Placeholder") {
+    const next = node.followElement && node.followElement.id && _layoutSink?.get(node.followElement.id);
+    const h = next ? next.y - y : result.height;
+    _nodeSink.set(node.id, { x, y, w: width, h, type: node.type, text: node.text });
+  }
+  return result;
+}
+
+function renderNodeOnly(node, x, y, width, fontSize, availH) {
   if (!node) return { elements: [], height: 0 };
   const textW = width - PADDING_X * 2;
   const elements = [];
@@ -941,6 +955,8 @@ function renderNode(node, x, y, width, fontSize, availH) {
  * @param {number} [options.fontSize=14] - Font size in px
  * @param {string} [options.colorMode] - "color" (default) or "bw" for black-and-white colors
  * @param {Object} [options.keywords=KEYWORDS_DE] - Keyword map for the true/false labels
+ * @param {Map} [options.layout] - filled with where each insert slot is drawn
+ * @param {Map} [options.nodeLayout] - with `layout`: filled with each node's drawn box
  * @param {"arrow"|"java"} [options.functionStyle="arrow"] - function headers as `max(a, b) -> int` or `int max(a, b)`
  * @returns {SVGSVGElement}
  */
@@ -966,9 +982,11 @@ export function renderStructogramSVG(tree, options = {}) {
   svg.style.height = "auto";
 
   _layoutSink = options.layout || null;
+  _nodeSink = options.layout ? options.nodeLayout || null : null;
   _closedSlots = options.closedSlots || null;
   const result = renderNode(tree, 0, 0, width, fontSize);
   _layoutSink = null;
+  _nodeSink = null;
   _closedSlots = null;
   for (const el of result.elements) {
     svg.appendChild(el);

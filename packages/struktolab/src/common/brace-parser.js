@@ -14,8 +14,9 @@
  *   - Java: a program whose only method is `main` shows just main's body
  *   - `Scanner sc = new Scanner(System.in)` and friends are setup, not
  *     algorithm, and are dropped
- *   - System.out.println / console.log / alert → output
- *   - `x = sc.nextInt()` / `x = prompt(…)` → input
+ *   - IO.println / IO.print (Java 25), System.out.println, console.log,
+ *     alert → output
+ *   - `x = IO.readln(…)`, `x = sc.nextInt()`, `x = prompt(…)` → input
  *   - `for (int i = 0; i < n; i++)` → count loop "i = 0 bis n - 1"
  *   - `for (int x : arr)` / `for (const x of arr)` → count loop "x in arr"
  *
@@ -35,6 +36,9 @@ import {
   inclusiveEnd,
   splitTopLevel,
   unwrapMain,
+  setSpan,
+  attachFrame,
+  withOrigin,
 } from "./parse-common.js";
 
 /** Thrown for code whose structure cannot be read; `.line` says where. */
@@ -129,10 +133,10 @@ function tokenize(src) {
       i += op ? op.length : 1;
       type = "op";
     }
-    tokens.push({ type, value: src.slice(start, i), line: startLine, space });
+    tokens.push({ type, value: src.slice(start, i), line: startLine, space, start, end: i });
     space = false;
   }
-  tokens.push({ type: "eof", value: "", line, space: false });
+  tokens.push({ type: "eof", value: "", line, space: false, start: n, end: n });
   return tokens;
 }
 
@@ -162,12 +166,15 @@ const JS_PREFIXES = new Set(["export", "default", "async"]);
 /** Lines that set up I/O rather than being part of the algorithm. */
 const SETUP = /^(?:final\s+)?(?:java\.util\.)?(?:Scanner|BufferedReader|InputStreamReader|Console)\s+\w+\s*=\s*(?:new\s+\w|System\.console\s*\()/;
 
-const OUTPUT = /^System\s*\.\s*(?:out|err)\s*\.\s*(println|print|printf|format)\s*\(([\s\S]*)\)$/;
+/** `IO.println(…)` — java.lang.IO since Java 25 — or the older `System.out.println(…)`. */
+const OUTPUT = /^(?:(?:java\s*\.\s*lang\s*\.\s*)?IO\s*\.\s*(?:println|print)|System\s*\.\s*(?:out|err)\s*\.\s*(?:println|print|printf|format))\s*\(([\s\S]*)\)$/;
 
 /** `x = sc.nextInt()`, `int n = Integer.parseInt(reader.readLine())`, … */
 const ASSIGNMENT = /^(?:final\s+)?(?:[\w$.<>?,\[\]\s]+?\s+)?([\p{L}_$][\p{L}\p{N}_$]*(?:\s*\[[^\]]*\])*)\s*=(?!=)\s*([\s\S]+)$/u;
 const READ_CALL = /^(?:[\w.]+\s*\.\s*(?:parse\w+|valueOf)\s*\(\s*)?(?:[\w.]+(?:\s*\(\s*\))?\s*\.\s*)+(?:next\w*|readLine)\s*\(\s*\)\s*\)?$/;
 const DIALOG = /^(?:javax\.swing\.)?JOptionPane\s*\.\s*showInputDialog\s*\(/;
+/** `IO.readln()`, `IO.readln("Zahl: ")`, `Integer.parseInt(IO.readln(…))` */
+const IO_READ = /^(?:[\w.]+\s*\.\s*(?:parse\w+|valueOf)\s*\(\s*)?(?:java\s*\.\s*lang\s*\.\s*)?IO\s*\.\s*readln\s*\(/;
 
 const JS_OUTPUT = /^(?:console\s*\.\s*(?:log|info|warn|error)|alert|document\s*\.\s*write(?:ln)?)\s*\(([\s\S]*)\)$/;
 /** `prompt(…)`, `Number(prompt(…))`, `parseInt(prompt(…), 10)`, `+prompt(…)` */
@@ -177,15 +184,18 @@ const JS_SETUP = /^(?:["']use strict["']$|import\b)/;
 
 function simpleStatement(text, js) {
   if (js ? JS_SETUP.test(text) : SETUP.test(text)) return [];
+  const lang = js ? "javascript" : "java";
 
   const out = (js ? JS_OUTPUT : OUTPUT).exec(text);
-  if (out) return [node("OutputNode", ioText(out[js ? 1 : 2]))];
+  if (out) return [withOrigin(node("OutputNode", ioText(out[1])), lang, text)];
 
   const assign = ASSIGNMENT.exec(text);
   if (assign) {
     const rhs = assign[2].trim();
-    const isRead = js ? JS_READ.test(rhs) : READ_CALL.test(rhs) || DIALOG.test(rhs);
-    if (isRead) return [node("InputNode", assign[1].replace(/\s+/g, ""))];
+    const isRead = js
+      ? JS_READ.test(rhs)
+      : IO_READ.test(rhs) || READ_CALL.test(rhs) || DIALOG.test(rhs);
+    if (isRead) return [withOrigin(node("InputNode", assign[1].replace(/\s+/g, "")), lang, text)];
   }
   return [node("TaskNode", text)];
 }
@@ -347,7 +357,10 @@ class Parser {
       if (this.peek().type === "eof") {
         fail("missing", this.peek().line, "}");
       }
-      items.push(...(member ? this.parseMember() : this.parseStatement()));
+      const first = this.peek();
+      const nodes = member ? this.parseMember() : this.parseStatement();
+      setSpan(nodes, first.start, this.tokens[this.pos - 1]?.end);
+      items.push(...nodes);
     }
     return items;
   }
@@ -365,6 +378,7 @@ class Parser {
 
     // Modifiers and annotations, remembering where the declaration started.
     const start = this.pos;
+    const modifiers = [];
     for (;;) {
       if (this.js) {
         // static, async, get, set — but only in front of a name, as `get(x)` is a method too.
@@ -378,7 +392,7 @@ class Parser {
       if (this.is("@") && !this.is("interface", 1)) this.skipAnnotation();
       else if (this.peek().type === "ident" && MODIFIERS.has(this.peek().value)) {
         if (this.is("non") && this.is("-", 1)) { this.next(); this.next(); }
-        this.next();
+        modifiers.push(this.next().value);
       } else break;
     }
     const hadModifiers = this.pos > start;
@@ -395,7 +409,12 @@ class Parser {
     }
 
     const method = this.methodAhead();
-    if (method) return [this.parseMethod(method)];
+    if (method) {
+      const fn = this.parseMethod(method);
+      // `public static`: kept so the method is written back the way it was.
+      if (!this.js) fn.modifiers = modifiers.join(" ");
+      return [fn];
+    }
 
     // Not a declaration: a statement. Modifiers (`final int x`) are part of it.
     if (hadModifiers) this.pos = start;
@@ -830,7 +849,8 @@ function parse(source, options, js) {
  * @throws {CodeParseError} when the code's structure cannot be read
  */
 export function parseJava(source, options = {}) {
-  return chain(unwrapMain(parse(source, options, false)));
+  const items = unwrapMain(parse(source, options, false));
+  return attachFrame(chain(items), items, source || "", "java");
 }
 
 /**
@@ -842,5 +862,6 @@ export function parseJava(source, options = {}) {
  * @throws {CodeParseError} when the code's structure cannot be read
  */
 export function parseJavaScript(source, options = {}) {
-  return chain(parse(source, options, true));
+  const items = parse(source, options, true);
+  return attachFrame(chain(items), items, source || "", "javascript");
 }

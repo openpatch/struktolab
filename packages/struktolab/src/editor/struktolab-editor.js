@@ -11,6 +11,8 @@ import {
 import { generateCode } from "../common/code-generator.js";
 import { parseJava, parseJavaScript } from "../common/brace-parser.js";
 import { parsePython } from "../common/python-parser.js";
+import { wrapInFrame, inlineSource } from "../common/parse-common.js";
+import { serializeDocument, applyDocument } from "../common/document.js";
 import { functionHeader, parseFunctionHeader } from "../common/function-signature.js";
 import {
   EditorView,
@@ -91,6 +93,19 @@ const INSERT_HEIGHT =
 const EMPTY_BRANCH_HEIGHT =
   typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? 56 : 40;
 
+/**
+ * Run `fn` once the element's children exist. While the page is still being
+ * parsed, an element is connected before its inline <script> children are —
+ * waiting one frame is not always enough on a long page.
+ */
+function whenChildrenParsed(fn) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => fn(), { once: true });
+  } else {
+    requestAnimationFrame(() => fn());
+  }
+}
+
 /** Deep enough to undo a session's worth of mistakes, bounded so it can't grow forever. */
 const HISTORY_LIMIT = 100;
 
@@ -122,7 +137,7 @@ const UI_STRINGS = {
     blackWhite: "Schwarz-Weiß",
     placeholder: "Pseudocode...",
     javaPlaceholder:
-      "Java-Code, z. B.\n\npublic class Programm {\n    public static void main(String[] args) {\n        ...\n    }\n}",
+      "Java-Code, z. B.\n\nvoid main() {\n    int n = Integer.parseInt(IO.readln(\"Zahl n: \"));\n    IO.println(n * 2);\n}",
     pythonPlaceholder: "Python-Code, z. B.\n\nn = int(input(\"Zahl n: \"))\nfor i in range(n):\n    print(i)",
     javascriptPlaceholder: "JavaScript-Code, z. B.\n\nconst n = Number(prompt(\"Zahl n\"))\nfor (let i = 0; i < n; i++) {\n    console.log(i)\n}",
     codeMode: "Code",
@@ -203,7 +218,7 @@ const UI_STRINGS = {
     blackWhite: "Black & White",
     placeholder: "Pseudocode...",
     javaPlaceholder:
-      "Java code, e.g.\n\npublic class Program {\n    public static void main(String[] args) {\n        ...\n    }\n}",
+      "Java code, e.g.\n\nvoid main() {\n    int n = Integer.parseInt(IO.readln(\"Number n: \"));\n    IO.println(n * 2);\n}",
     pythonPlaceholder: "Python code, e.g.\n\nn = int(input(\"Number n: \"))\nfor i in range(n):\n    print(i)",
     javascriptPlaceholder: "JavaScript code, e.g.\n\nconst n = Number(prompt(\"Number n\"))\nfor (let i = 0; i < n; i++) {\n    console.log(i)\n}",
     codeMode: "Code",
@@ -491,23 +506,34 @@ input[type="number"] { width: 60px; }
   stroke-dasharray: none;
 }
 
-/* What is being carried, following the pointer. */
+/* What is being carried, following the pointer: a block, slightly lifted. */
 .drag-ghost {
   position: fixed;
   z-index: 40;
   display: none;
-  padding: 4px 10px;
-  max-width: 220px;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-width: 140px;
+  max-width: 260px;
+  padding: 8px 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  color: #fff;
-  background: rgb(1, 116, 96);
-  border-radius: 3px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  color: #242428;
+  background: #fff;
+  border: 2px solid rgb(1, 116, 96);
+  border-radius: 4px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  opacity: 0.95;
+  transform: rotate(-1.5deg);
   pointer-events: none;
 }
+.drag-ghost .icon { color: rgb(1, 116, 96); }
+/* While dragging the diagram only shows where the block will land. */
+.editor-area.dragging { cursor: grabbing; }
+.editor-area.dragging svg * { pointer-events: none !important; }
 
 /* The insert menu, opened from a slot or from a focused node. */
 .type-menu {
@@ -604,6 +630,8 @@ input[type="number"] { width: 60px; }
  *
  * Attributes:
  *   scale, font-size, src, lang, color-mode (same as <struktolab-renderer>)
+ *   code-mode — the code area's language: "pseudocode" (default), "java",
+ *              "python", "javascript", or "none" to hide it. Also in View.
  *   embedded — the host owns the file. Hides the Save/Load buttons and turns the
  *              PNG/SVG buttons into an "export-image" event instead of a download.
  *
@@ -612,6 +640,9 @@ input[type="number"] { width: 60px; }
  *
  * Methods:
  *   toCode(lang)         — export to Python/Java/JavaScript
+ *   loadCode(code, lang) — build the structogram from Java/Python/JavaScript/pseudocode
+ *   toDocument()         — model, settings and the student's code as one object
+ *   fromDocument(doc)    — restore what toDocument() returned
  *   saveJSON()           — return clean JSON string of the tree
  *   loadJSON(json)       — load from JSON string or object
  *   exportImage(format)  — export as PNG or SVG Blob (async)
@@ -636,6 +667,14 @@ class StruktolabEditor extends HTMLElement {
      * code, so this remembers the language behind it. Null until there is one.
      */
     this._codeLanguage = null;
+    /** The language the code area's text is in, and whether it lags behind the diagram. */
+    this._codeTextLanguage = null;
+    this._codeNeedsSync = false;
+    /**
+     * The student's code around the algorithm (imports, class, main …), from
+     * the last time their code was read. Regenerated blocks go back inside it.
+     */
+    this._codeFrame = null;
     this._syncing = false; // guard against circular updates
     this._debounceTimer = null;
 
@@ -758,7 +797,7 @@ class StruktolabEditor extends HTMLElement {
 
   connectedCallback() {
     this._applyEmbedded();
-    requestAnimationFrame(() => this._initialize());
+    whenChildrenParsed(() => this._initialize());
   }
 
   _uiLang() {
@@ -789,8 +828,12 @@ class StruktolabEditor extends HTMLElement {
       const mode = codeScript?.dataset.code;
       if (codeScript && CODE_PARSERS[mode]) {
         try {
-          this._tree = this._prepTree(this._parseCode(codeScript.textContent, mode));
+          const code = inlineSource(codeScript.textContent);
+          this._tree = this._prepTree(this._readCode(code, mode));
           if (!this.hasAttribute("code-mode")) this.setAttribute("code-mode", mode);
+          // Shown as written — not as the generator would write it.
+          this._setCode(code);
+          this._codeTextLanguage = mode;
           this._emitChange();
         } catch (e) {
           console.error(`struktolab-editor: failed to parse ${mode}`, e);
@@ -833,7 +876,11 @@ class StruktolabEditor extends HTMLElement {
       });
     }
     this._render();
-    this._syncTreeToPseudocode();
+    // A host may have put the student's own code in already (a saved
+    // document); start-up must not replace it with generated code.
+    if (this._codeTextLanguage !== this.codeMode || this._codeNeedsSync) {
+      this._syncTreeToPseudocode();
+    }
   }
 
   attributeChangedCallback(name, oldVal, newVal) {
@@ -845,7 +892,12 @@ class StruktolabEditor extends HTMLElement {
       if (CODE_MODES.includes(newVal) && newVal !== "none") this._codeLanguage = newVal;
       this._applyCodeMode();
       if (this._tree) {
-        this._syncTreeToPseudocode();
+        // Hiding the code changes nothing in it; back from "No code" to the
+        // same language, the text is still right unless the diagram changed.
+        const shown = this.codeMode !== "none";
+        if (shown && (this.codeMode !== this._codeTextLanguage || this._codeNeedsSync)) {
+          this._syncTreeToPseudocode();
+        }
         this._render(); // function headers read like the code beside them
       }
     } else {
@@ -907,14 +959,67 @@ class StruktolabEditor extends HTMLElement {
     if (!CODE_MODES.includes(mode) || mode === "none") {
       throw new Error(`struktolab-editor: cannot load code as "${mode}"`);
     }
-    this._tree = this._prepTree(this._parseCode(code, mode));
+    this._tree = this._prepTree(this._readCode(code, mode));
     this._resetHistory();
     this.codeMode = mode;
     this._render();
-    this._syncTreeToPseudocode();
     // Keep the code as it was written, not as the generator would write it.
     this._setCode(code);
+    this._codeTextLanguage = mode;
+    this._codeNeedsSync = false;
+    this._clearCodeError();
     this._emitChange();
+  }
+
+  /**
+   * Everything a saved structogram needs, as one object: the model, the
+   * view settings (language, font size, colours, scale, code mode) and the
+   * student's own code. What a `.struktolab` file and a shared link hold.
+   * @returns {{version: number, model: Object|null, settings: Object, code?: Object}}
+   */
+  toDocument() {
+    return serializeDocument(this);
+  }
+
+  /**
+   * Restore what `toDocument()` returned. Also takes a bare model tree.
+   * @param {Object|string} doc
+   * @returns {boolean} whether a model was loaded
+   */
+  fromDocument(doc) {
+    return applyDocument(this, typeof doc === "string" ? JSON.parse(doc) : doc);
+  }
+
+  /**
+   * The code as the student wrote it, for saving with the document — or
+   * null when there is nothing the diagram cannot give back by itself.
+   * @returns {{lang: string, text: string} | null}
+   */
+  get codeSnapshot() {
+    const lang = this._codeTextLanguage;
+    if (!lang || lang === "pseudocode" || this._codeNeedsSync) return null;
+    const text = this._getCode();
+    return text.trim() ? { lang, text } : null;
+  }
+
+  /**
+   * Put saved code back without rebuilding the diagram from it — the diagram
+   * comes from the document's model. Code that no longer parses is shown
+   * with its error, as it was when it was saved.
+   */
+  restoreCode(snapshot) {
+    if (!snapshot || !CODE_PARSERS[snapshot.lang]) return;
+    if (this.codeMode !== "none" && this.codeMode !== snapshot.lang) return;
+    this._codeLanguage = snapshot.lang;
+    this._setCode(snapshot.text);
+    this._codeTextLanguage = snapshot.lang;
+    this._codeNeedsSync = false;
+    try {
+      this._readCode(snapshot.text, snapshot.lang);
+      this._clearCodeError();
+    } catch (e) {
+      this._showCodeError(e.message, e.line);
+    }
   }
 
   /**
@@ -939,6 +1044,15 @@ class StruktolabEditor extends HTMLElement {
     return CODE_PARSERS[mode](code, { lang: this._uiLang() });
   }
 
+  /** Parse the student's code and remember the program around the algorithm. */
+  _readCode(code, mode) {
+    const tree = this._parseCode(code, mode);
+    if (tree._frame) this._codeFrame = tree._frame;
+    // No blocks to measure from: an earlier frame of this language still fits.
+    else if (this._codeFrame?.lang !== mode) this._codeFrame = null;
+    return tree;
+  }
+
   toCode(lang) {
     if (!this._tree) return "";
     return generateCode(this._tree, lang);
@@ -947,7 +1061,13 @@ class StruktolabEditor extends HTMLElement {
   async _fetchTree(url) {
     try {
       const res = await fetch(url);
-      this._tree = this._prepTree(await res.json());
+      const data = await res.json();
+      // A saved .struktolab document brings its settings and code along.
+      if (data && typeof data === "object" && ("model" in data || "settings" in data)) {
+        this.fromDocument(data);
+        return;
+      }
+      this._tree = this._prepTree(data);
       this._render();
       this._syncTreeToPseudocode();
     } catch (e) {
@@ -1062,7 +1182,7 @@ class StruktolabEditor extends HTMLElement {
           this._setMode(null);
           return;
         }
-        this._startCarry("place:" + item.type, label, e);
+        this._startCarry("place:" + item.type, label, e, item.icon);
       });
       // Pointer presses are handled above; this is the keyboard's way in.
       btn.addEventListener("click", (e) => {
@@ -1143,7 +1263,9 @@ class StruktolabEditor extends HTMLElement {
     langSelect.addEventListener("change", () => {
       this.setAttribute("lang", langSelect.value);
       this._keywords = null;
-      this._onTreeChange();
+      // Pseudocode is written in the UI language's keywords; real code is not.
+      if (this.codeMode === "pseudocode") this._onTreeChange();
+      else this._onViewChange();
     });
     row(this._t("language"), langSelect);
     this._langSelect = langSelect;
@@ -1155,7 +1277,7 @@ class StruktolabEditor extends HTMLElement {
     fsInput.value = this.getAttribute("font-size") || "14";
     fsInput.addEventListener("change", () => {
       this.setAttribute("font-size", fsInput.value);
-      this._onTreeChange();
+      this._onViewChange();
     });
     row(this._t("fontSize"), fsInput);
     this._fsInput = fsInput;
@@ -1173,7 +1295,7 @@ class StruktolabEditor extends HTMLElement {
       } else {
         scaleInput.value = this.getAttribute("scale") || "1";
       }
-      this._onTreeChange();
+      this._onViewChange();
     });
     row(this._t("scale"), scaleInput);
     this._scaleInput = scaleInput;
@@ -1186,7 +1308,7 @@ class StruktolabEditor extends HTMLElement {
     colorModeSelect.value = this.getAttribute("color-mode") || "color";
     colorModeSelect.addEventListener("change", () => {
       this.setAttribute("color-mode", colorModeSelect.value);
-      this._onTreeChange();
+      this._onViewChange();
     });
     row(this._t("colours"), colorModeSelect);
     this._colorModeSelect = colorModeSelect;
@@ -1370,6 +1492,7 @@ class StruktolabEditor extends HTMLElement {
       keywords: this._getKeywords(),
       functionStyle: this._functionStyle(),
       layout: this._slotLayout,
+      nodeLayout: (this._drawnBoxes = new Map()),
       closedSlots: this._closedSlots,
     });
     setEmptyBranchHeight(0);
@@ -1432,6 +1555,19 @@ class StruktolabEditor extends HTMLElement {
    * Returns a Map of nodeId → { x, y, w, h, type, text }.
    * @param {boolean} withInsertSpace - if true, InsertNodes occupy INSERT_HEIGHT
    */
+  /**
+   * Every node's box as the diagram draws it. Branches and loops are
+   * stretched to fill their column, which only the renderer knows, so its
+   * report wins; the own calculation is what is left without one.
+   */
+  _boxesFor(width, fontSize) {
+    const computed = this._computeLayout(this._tree, 0, 0, width, fontSize, false);
+    const drawn = this._drawnBoxes;
+    if (!drawn || !drawn.size) return computed;
+    for (const [id, box] of drawn) computed.set(id, { ...computed.get(id), ...box });
+    return computed;
+  }
+
   _computeLayout(tree, x, y, width, fontSize, withInsertSpace) {
     const layout = new Map();
     this._layoutNode(tree, x, y, width, fontSize, layout, withInsertSpace);
@@ -2017,14 +2153,9 @@ class StruktolabEditor extends HTMLElement {
   /* ── Edit targets (click-to-edit) ───────────────────────── */
 
   _addNodeTargets(svg, width, fontSize) {
-    const layout = this._computeLayout(
-      this._tree,
-      0,
-      0,
-      width,
-      fontSize,
-      false,
-    );
+    const layout = this._boxesFor(width, fontSize);
+    // Where every node sits in the diagram at rest, for dragging onto it.
+    this._nodeBoxes = layout;
     const svgNS = "http://www.w3.org/2000/svg";
 
     // Sort by area descending so smaller child rects are on top
@@ -2468,27 +2599,48 @@ class StruktolabEditor extends HTMLElement {
   /**
    * Adding and moving are one gesture with two sources. Something is picked
    * up — a block from the palette, or an existing node by its grip — and put
-   * down on a slot.
+   * down in the diagram.
    *
-   * With a pointer (mouse, pen or finger) it is a real drag: a ghost follows
-   * and the nearest slot lights up. Press and release without moving and the
-   * thing stays picked up instead, every slot shows itself, and a tap on one
-   * puts it there. That second way is what a keyboard gets too.
+   * With a pointer (mouse, pen or finger) it is a real drag. The diagram stays
+   * as it is — nothing jumps away from where the pointer is heading — and one
+   * line shows where the block would land: over the upper half of a block it
+   * goes before it, over the lower half after it, and an empty branch lights
+   * up as a whole. Escape puts it back.
+   *
+   * Press and release without moving and the thing stays picked up instead:
+   * every place opens up as a gap, and a tap on one puts it there. That
+   * second way is what a keyboard gets too.
    *
    * @param {string} mode "place:TYPE" or "move:ID"
    */
-  _startCarry(mode, label, event) {
+  _startCarry(mode, label, event, icon) {
     this._hideTypeMenu();
     this._hideEditOverlay();
-    this._setMode(mode);
-    if (!event || event.pointerId === undefined) return;
+    if (!event || event.pointerId === undefined) {
+      this._setMode(mode);
+      return;
+    }
 
     const ghost = document.createElement("div");
     ghost.className = "drag-ghost";
-    ghost.textContent = label;
+    if (icon) {
+      const iconEl = document.createElement("span");
+      iconEl.className = "icon";
+      iconEl.textContent = icon;
+      ghost.appendChild(iconEl);
+    }
+    ghost.append(label);
     this._shadow.appendChild(ghost);
 
-    const drag = { ghost, moved: false, startX: event.clientX, startY: event.clientY };
+    const drag = {
+      mode,
+      ghost,
+      moved: false,
+      startX: event.clientX,
+      startY: event.clientY,
+      target: null,
+      closed: this._unusableSlots(mode),
+    };
     this._drag = drag;
     this._positionGhost(event.clientX, event.clientY);
 
@@ -2499,74 +2651,239 @@ class StruktolabEditor extends HTMLElement {
       ) {
         return;
       }
-      drag.moved = true;
-      ghost.style.display = "block";
+      if (!drag.moved) {
+        drag.moved = true;
+        ghost.style.display = "flex";
+        this._editorArea.classList.add("dragging");
+        this._markMoving(drag);
+      }
       this._positionGhost(e.clientX, e.clientY);
       // The page cannot scroll under a finger that is dragging, so it scrolls
       // for it near the edges of the window.
       const edge = 48;
       if (e.clientY < edge) window.scrollBy(0, -12);
       else if (e.clientY > window.innerHeight - edge) window.scrollBy(0, 12);
-      this._highlightSlot(this._nearestSlot(e.clientX, e.clientY));
+      drag.target = this._dropTargetAt(e.clientX, e.clientY, drag.closed);
+      this._showDropTarget(drag);
     };
 
-    const onUp = () => {
+    const finish = () => {
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
-      document.removeEventListener("pointercancel", onUp);
+      document.removeEventListener("pointercancel", onCancel);
+      document.removeEventListener("keydown", onKey, true);
       ghost.remove();
+      this._editorArea.classList.remove("dragging");
       this._drag = null;
-
-      if (!drag.moved) return; // A tap: stay picked up, wait for the second tap.
-      const slot = this._activeSlot;
-      this._activeSlot = null;
-      if (slot) this._activateSlot(slot.id);
-      else this._setMode(null);
+    };
+    const onUp = () => {
+      finish();
+      // A tap: stay picked up, with every place open, and wait for the second tap.
+      if (!drag.moved) {
+        this._setMode(mode);
+        return;
+      }
+      if (drag.target) this._dropCarried(mode, drag.target.id);
+      else this._render(); // nothing to drop on: clear the line and marker
+    };
+    const onCancel = () => {
+      finish();
+      this._render();
+    };
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      onCancel();
     };
 
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
-    document.addEventListener("pointercancel", onUp);
+    document.addEventListener("pointercancel", onCancel);
+    document.addEventListener("keydown", onKey, true);
   }
 
   _startDrag(nodeId, event) {
     const node = findNode(this._tree, nodeId) ?? { type: "" };
-    this._startCarry("move:" + nodeId, this._nodeLabel(node), event);
+    const icon = TOOLBAR_ITEMS.find((item) => item.type === node.type)?.icon;
+    this._startCarry("move:" + nodeId, this._nodeLabel(node), event, icon);
   }
 
   _positionGhost(clientX, clientY) {
     if (!this._drag) return;
-    this._drag.ghost.style.left = clientX + 12 + "px";
-    this._drag.ghost.style.top = clientY + 12 + "px";
+    this._drag.ghost.style.left = clientX + 14 + "px";
+    this._drag.ghost.style.top = clientY + 10 + "px";
   }
 
-  /** The slot under the pointer, or the closest one in the same column. */
-  _nearestSlot(clientX, clientY) {
+  /** The diagram's own coordinates of a point on screen. */
+  _svgPoint(clientX, clientY) {
     const svg = this._editorArea.querySelector("svg");
-    if (!svg || !this._slots || !this._slots.length) return null;
-
-    const ctm = svg.getScreenCTM();
+    const ctm = svg?.getScreenCTM();
     if (!ctm) return null;
     const point = svg.createSVGPoint();
     point.x = clientX;
     point.y = clientY;
-    const { x, y } = point.matrixTransform(ctm.inverse());
+    return point.matrixTransform(ctm.inverse());
+  }
 
-    // On a block: that one. Otherwise the closest block, preferring the ones
-    // in the column the pointer is in.
-    let best = null;
-    let bestScore = Infinity;
-    for (const slot of this._slots) {
-      const { zone } = slot;
-      const dx = x < zone.x ? zone.x - x : x > zone.x + zone.w ? x - zone.x - zone.w : 0;
-      const dy = y < zone.top ? zone.top - y : y > zone.bottom ? y - zone.bottom : 0;
-      const score = dy + dx * 4;
-      if (score < bestScore) {
-        bestScore = score;
-        best = slot;
+  /**
+   * How far left each place reaches when something is dragged onto it. A
+   * place inside a loop, function or try reaches over that block's coloured
+   * bar on the left: with the pointer on the bar, the block goes into that
+   * body — the one way to reach the end of a loop whose last block is a
+   * branch, where the ends of both lie on the same line.
+   */
+  _slotReach() {
+    const reach = new Map();
+    const boxes = this._nodeBoxes || new Map();
+    const BARRED = new Set(["HeadLoopNode", "CountLoopNode", "FootLoopNode", "FunctionNode", "TryCatchNode"]);
+    const walk = (chain, left) => {
+      for (let n = chain; n; n = n.followElement) {
+        if (n.type === "InsertNode" && n.id && left != null) reach.set(n.id, left);
+        const box = n.id ? boxes.get(n.id) : null;
+        const inner = BARRED.has(n.type) && box ? box.x : null;
+        for (const key of ["child", "tryChild", "catchChild"]) if (n[key]) walk(n[key], inner);
+        for (const key of ["trueChild", "falseChild"]) if (n[key]) walk(n[key], null);
+        for (const c of n.cases || []) walk(c, null);
+        if (n.defaultNode) walk(n.defaultNode, null);
       }
+    };
+    walk(this._tree, null);
+    return reach;
+  }
+
+  /**
+   * Where a block dropped at this point would go, from the diagram as it
+   * rests: the closest place whose column the pointer is in — the line
+   * between two blocks, or a whole empty body.
+   *
+   * Nested blocks often end on the same line: a branch that is the last block
+   * of a loop or of another branch ends where its own branches end. Those
+   * places are told apart by how close the pointer is to the line:
+   *   - well above it, in the block that ends there: the innermost column;
+   *   - coming closer, step by step outwards — the line grows as it does;
+   *   - below it: right before the block that starts there, and if none does,
+   *     the outermost end — under the whole branch.
+   *
+   * @returns {{id: string, x: number, w: number, top: number, bottom: number, empty: boolean} | null}
+   */
+  _dropTargetAt(clientX, clientY, closed) {
+    const p = this._svgPoint(clientX, clientY);
+    if (!p || !this._slotLayout) return null;
+    const info = this._slotInfo(this._tree);
+    const reach = this._slotReach();
+
+    const candidates = [];
+    for (const [id, b] of this._slotLayout) {
+      if (closed.has(id)) continue;
+      const left = Math.min(reach.get(id) ?? b.x, b.x);
+      if (p.x < left || p.x > b.x + b.w) continue;
+      const slot = info.get(id);
+      const empty = Boolean(slot?.alone) && (b.avail ?? 0) > 1;
+      const top = b.y;
+      // An empty column is all target. The end of a column shorter than its
+      // neighbour reaches over the free space under its last block too.
+      const reachesDown = (empty || slot?.trailing) && (b.avail ?? 0) > 1;
+      const bottom = reachesDown ? b.y + b.avail : b.y;
+      const distance = p.y < top ? top - p.y : p.y > bottom ? p.y - bottom : 0;
+      candidates.push({ id, x: b.x, w: b.w, top, bottom, empty, distance, trailing: Boolean(slot?.trailing) });
     }
-    return bestScore <= 80 ? best : null;
+    if (!candidates.length) return null;
+
+    const nearest = Math.min(...candidates.map((c) => c.distance));
+    if (nearest > 60) return null;
+    // Innermost (narrowest) first.
+    const tied = candidates
+      .filter((c) => c.distance - nearest <= 0.5)
+      .sort((a, b) => a.w - b.w);
+    if (tied.length === 1) return tied[0];
+
+    const line = tied[0];
+    if (p.y > line.top) {
+      return tied.find((c) => !c.trailing) ?? tied[tied.length - 1];
+    }
+    const STEP = 8;
+    const outward = Math.floor((line.top - p.y) / STEP);
+    return tied[Math.max(0, tied.length - 1 - outward)];
+  }
+
+  /** The one line (or lit empty body) that says where the block lands. */
+  _showDropTarget(drag) {
+    const svg = this._editorArea.querySelector("svg");
+    if (!svg) return;
+    const svgNS = "http://www.w3.org/2000/svg";
+    let g = svg.querySelector(".drop-target");
+    if (!g) {
+      g = document.createElementNS(svgNS, "g");
+      g.setAttribute("class", "drop-target");
+      g.setAttribute("pointer-events", "none");
+      svg.appendChild(g);
+    }
+    g.replaceChildren();
+    const t = drag.target;
+    if (!t) return;
+    const color = "rgb(1, 116, 96)";
+    if (t.empty) {
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", t.x + 2);
+      rect.setAttribute("y", t.top + 2);
+      rect.setAttribute("width", Math.max(t.w - 4, 1));
+      rect.setAttribute("height", Math.max(t.bottom - t.top - 4, 1));
+      rect.setAttribute("rx", 3);
+      rect.setAttribute("fill", "rgba(1, 116, 96, 0.18)");
+      rect.setAttribute("stroke", color);
+      rect.setAttribute("stroke-width", 2);
+      rect.setAttribute("stroke-dasharray", "6 4");
+      g.appendChild(rect);
+      return;
+    }
+    const line = document.createElementNS(svgNS, "rect");
+    line.setAttribute("x", t.x + 2);
+    line.setAttribute("y", t.top - 2);
+    line.setAttribute("width", Math.max(t.w - 4, 1));
+    line.setAttribute("height", 4);
+    line.setAttribute("rx", 2);
+    line.setAttribute("fill", color);
+    const dot = document.createElementNS(svgNS, "circle");
+    dot.setAttribute("cx", t.x + 4);
+    dot.setAttribute("cy", t.top);
+    dot.setAttribute("r", 5);
+    dot.setAttribute("fill", "#fff");
+    dot.setAttribute("stroke", color);
+    dot.setAttribute("stroke-width", 3);
+    g.append(line, dot);
+  }
+
+  /** While moving: the node being moved, faded where it still is. */
+  _markMoving(drag) {
+    if (!drag.mode.startsWith("move:")) return;
+    const box = this._nodeBoxes?.get(drag.mode.slice("move:".length));
+    const svg = this._editorArea.querySelector("svg");
+    if (!box || !svg) return;
+    const veil = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    veil.setAttribute("x", box.x);
+    veil.setAttribute("y", box.y);
+    veil.setAttribute("width", box.w);
+    veil.setAttribute("height", box.h);
+    veil.setAttribute("fill", "rgba(255, 255, 255, 0.65)");
+    veil.setAttribute("stroke", "rgb(1, 116, 96)");
+    veil.setAttribute("stroke-width", 2);
+    veil.setAttribute("stroke-dasharray", "6 4");
+    veil.setAttribute("pointer-events", "none");
+    svg.appendChild(veil);
+  }
+
+  /** Put what was dragged into the place `slotId`. */
+  _dropCarried(mode, slotId) {
+    if (mode.startsWith("place:")) {
+      this._insertType(slotId, mode.slice("place:".length));
+      return;
+    }
+    const nodeId = mode.slice("move:".length);
+    this._pushHistory();
+    this._tree = this._prepTree(moveNode(this._tree, nodeId, slotId));
+    this._focusedId = nodeId;
+    this._onTreeChange();
   }
 
   _highlightSlot(slot) {
@@ -2701,8 +3018,7 @@ class StruktolabEditor extends HTMLElement {
    * While moving: the slots the node cannot go to — inside itself, and right
    * before or after itself, where it already is. They stay closed.
    */
-  _unusableSlots() {
-    const mode = this._mode || "";
+  _unusableSlots(mode = this._mode || "") {
     if (!mode.startsWith("move:")) return new Set();
     const movingId = mode.slice("move:".length);
     const moving = findNode(this._tree, movingId);
@@ -2791,7 +3107,7 @@ class StruktolabEditor extends HTMLElement {
   /* ── Case add/delete buttons ────────────────────────────── */
 
   _addCaseButtons(svg, width, fontSize) {
-    const layout = this._computeLayout(this._tree, 0, 0, width, fontSize, false);
+    const layout = this._boxesFor(width, fontSize);
     const svgNS = "http://www.w3.org/2000/svg";
     const BTN_SIZE = 18;
     const BTN_R = 3;
@@ -2873,7 +3189,7 @@ class StruktolabEditor extends HTMLElement {
   /* ── Column resize handles ──────────────────────────────── */
 
   _addResizeHandles(svg, width, fontSize) {
-    const layout = this._computeLayout(this._tree, 0, 0, width, fontSize, false);
+    const layout = this._boxesFor(width, fontSize);
     const svgNS = "http://www.w3.org/2000/svg";
     const HANDLE_WIDTH = this._coarsePointer ? 22 : 6;
 
@@ -3215,6 +3531,7 @@ class StruktolabEditor extends HTMLElement {
       });
       // A structogram in another language, not an edit of this one.
       this._resetHistory();
+      this._codeFrame = null;
       this._codeLanguage = mode;
       this.codeMode = mode;
       this._render();
@@ -3247,21 +3564,30 @@ class StruktolabEditor extends HTMLElement {
     const mode = this.codeMode;
     if (mode === "none") return "";
     if (mode === "pseudocode") return treeToPseudocode(this._tree, this._getKeywords());
-    return generateCode(this._tree, mode);
+    const frame = this._codeFrame;
+    // Back inside the student's program, at the indentation it had.
+    return wrapInFrame(generateCode(this._tree, mode), frame?.lang === mode ? frame : null);
   }
 
   /** Text in the current code mode as a tree. */
   _codeToTree(code) {
-    return this._parseCode(code, this.codeMode);
+    return this._readCode(code, this.codeMode);
   }
 
   /* ── Pseudocode sync ────────────────────────────────────── */
 
   _syncTreeToPseudocode() {
     if (this._syncing) return;
+    // Hidden code is brought up to date when it is shown again.
+    if (this.codeMode === "none") {
+      this._codeNeedsSync = true;
+      return;
+    }
     this._syncing = true;
     try {
       this._setCode(this._treeToCode());
+      this._codeTextLanguage = this.codeMode;
+      this._codeNeedsSync = false;
       this._clearCodeError();
     } catch (e) {
       // ignore serialization errors
@@ -3270,6 +3596,7 @@ class StruktolabEditor extends HTMLElement {
   }
 
   _onPseudocodeInput() {
+    this._codeTextLanguage = this.codeMode;
     clearTimeout(this._debounceTimer);
     this._debounceTimer = setTimeout(() => this._syncPseudocodeToTree(), 600);
   }
@@ -3304,6 +3631,12 @@ class StruktolabEditor extends HTMLElement {
 
   /* ── Change handling ────────────────────────────────────── */
 
+  /** Only how the diagram looks changed: the code stays as it is. */
+  _onViewChange() {
+    this._render();
+    this._emitChange();
+  }
+
   _onTreeChange() {
     this._render();
     this._syncTreeToPseudocode();
@@ -3331,6 +3664,7 @@ class StruktolabEditor extends HTMLElement {
   loadJSON(json) {
     const data = typeof json === "string" ? JSON.parse(json) : json;
     this._tree = this._prepTree(data);
+    this._codeFrame = null;
     // A different document, not an edit to this one — undoing back across it
     // would put the user in a structogram they never opened.
     this._resetHistory();

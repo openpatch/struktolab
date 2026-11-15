@@ -186,3 +186,99 @@ export function unwrapMain(items, isMainCall = () => false) {
   const main = functions[0];
   return items.flatMap((n) => (n === main ? main._body : isMainCall(n) ? [] : [n]));
 }
+
+/* ── Where the algorithm sits in the source ────────────────── */
+
+/**
+ * Remember where in the source `nodes` came from, as character offsets.
+ * A span already set from further inside (a class's methods, main's body)
+ * is the more precise one and stays.
+ */
+export function setSpan(nodes, start, end) {
+  if (start == null || end == null) return;
+  for (const n of nodes) {
+    if (!n._span) Object.defineProperty(n, "_span", { value: [start, end], configurable: true });
+  }
+}
+
+/**
+ * The code around the algorithm: what comes before its first block and after
+ * its last one — imports, the class, main's header, `if __name__ …`. The
+ * editor puts regenerated blocks back between the two, so editing the diagram
+ * does not throw away the student's program around it.
+ *
+ * Attached to the returned tree as a non-enumerable `_frame`; null when there
+ * are no blocks to measure from.
+ *
+ * @returns {Object} root
+ */
+export function attachFrame(root, items, source, lang) {
+  const spanned = items.filter((n) => n._span);
+  const frame = spanned.length
+    ? frameAround(source, spanned[0]._span[0], spanned[spanned.length - 1]._span[1], lang)
+    : null;
+  Object.defineProperty(root, "_frame", { value: frame, configurable: true });
+  return root;
+}
+
+function frameAround(src, start, end, lang) {
+  const lineStart = src.lastIndexOf("\n", start - 1) + 1;
+  const prefix = src.slice(lineStart, start);
+  let before;
+  let indent;
+  if (/^[ \t]*$/.test(prefix)) {
+    before = src.slice(0, lineStart);
+    indent = prefix;
+  } else {
+    // `void f() { x(); }` on one line: the blocks go on lines of their own.
+    const lineIndent = /^[ \t]*/.exec(prefix)[0];
+    before = src.slice(0, start).replace(/[ \t]+$/, "") + "\n";
+    indent = lineIndent + "    ";
+  }
+
+  let lineEnd = src.indexOf("\n", end);
+  if (lineEnd < 0) lineEnd = src.length;
+  let after;
+  if (/^[ \t]*$/.test(src.slice(end, lineEnd))) {
+    after = src.slice(lineEnd);
+  } else {
+    const lastLineStart = src.lastIndexOf("\n", end - 1) + 1;
+    const lastIndent = /^[ \t]*/.exec(src.slice(lastLineStart))[0];
+    after = "\n" + (lastIndent.length >= indent.length ? lastIndent.slice(4) : lastIndent) + src.slice(end).replace(/^[ \t]+/, "");
+  }
+  return { lang, before, after, indent };
+}
+
+/** Generated code put back between the frame's two halves, at its indentation. */
+export function wrapInFrame(body, frame) {
+  if (!frame) return body;
+  const indented = body
+    .replace(/\n$/, "")
+    .split("\n")
+    .map((line) => (line ? frame.indent + line : line))
+    .join("\n");
+  return frame.before + indented + frame.after;
+}
+
+/**
+ * What a block was written as, so code generated for the same language can
+ * write it the same way: `int n = sc.nextInt()` rather than a generic read.
+ * Only valid while the block's text is still `text`.
+ */
+export function withOrigin(n, lang, code) {
+  n.origin = { lang, code, text: n.text };
+  return n;
+}
+
+/**
+ * Code written inside an HTML element: blank lines around it and the
+ * indentation all its lines share are the page's, not the code's.
+ */
+export function inlineSource(text) {
+  const lines = (text || "").replace(/\t/g, "    ").split("\n");
+  while (lines.length && !lines[0].trim()) lines.shift();
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  const indents = lines.filter((l) => l.trim()).map((l) => /^ */.exec(l)[0].length);
+  const common = indents.length ? Math.min(...indents) : 0;
+  return lines.map((l) => l.slice(common)).join("\n") + (lines.length ? "\n" : "");
+}

@@ -37,8 +37,9 @@ test("Java keeps its header as written", () => {
   assert.equal(tree.returnType, "int");
   assert.deepEqual(params(tree), ["int a", "int b"]);
   assert.equal(tree.followElement.returnType, "void");
-  assert.match(generateCode(parseJava("int max(int a, int b) { return a; }"), "java"), /^public int max\(int a, int b\) \{/);
-  assert.match(generateCode(parseJava("void p() { x(); }"), "java"), /^public void p\(\) \{/);
+  // Modifiers are written back as they were; a method without any stays without.
+  assert.match(generateCode(parseJava("static int max(int a, int b) { return a; }"), "java"), /^static int max\(int a, int b\) \{/);
+  assert.match(generateCode(parseJava("void p() { x(); }"), "java"), /^void p\(\) \{/);
 });
 
 test("Python keeps its header as written", () => {

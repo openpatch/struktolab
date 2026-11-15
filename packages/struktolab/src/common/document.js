@@ -6,7 +6,12 @@
  * scale. That envelope is what a `.struktolab` file contains, and what the web
  * app packs into the URL hash.
  *
- *   { version: 2, model: <tree | null>, settings: { lang, fontSize, colorMode, scale, codeMode } }
+ *   { version: 2, model: <tree | null>, settings: { lang, fontSize, colorMode, scale, codeMode },
+ *     code?: { lang, text } }
+ *
+ * `code` is the student's own code when the structogram was written in Java,
+ * Python or JavaScript, so it comes back as they wrote it — class, comments
+ * and all — rather than as generated code.
  */
 
 export const DOCUMENT_VERSION = 2;
@@ -21,6 +26,7 @@ const DEFAULT_SETTINGS = {
 
 /** Read the current state of an editor element as a document envelope. */
 export function serializeDocument(editor) {
+  const code = editor.codeSnapshot;
   return {
     version: DOCUMENT_VERSION,
     model: JSON.parse(editor.saveJSON()),
@@ -31,6 +37,7 @@ export function serializeDocument(editor) {
       scale: editor.getAttribute("scale") || DEFAULT_SETTINGS.scale,
       codeMode: editor.getAttribute("code-mode") || DEFAULT_SETTINGS.codeMode,
     },
+    ...(code ? { code } : {}),
   };
 }
 
@@ -60,9 +67,13 @@ export function applyDocument(editor, doc) {
 
   // An empty structogram serializes to `null` — there is nothing to load, and
   // the editor's own empty root is exactly the right thing to leave in place.
-  if (!model) return false;
+  if (!model) {
+    editor.restoreCode?.(doc.code);
+    return false;
+  }
 
   editor.loadJSON(model);
+  editor.restoreCode?.(doc.code);
   return true;
 }
 

@@ -29,6 +29,9 @@ import {
   inclusiveEnd,
   splitTopLevel,
   unwrapMain,
+  setSpan,
+  attachFrame,
+  withOrigin,
 } from "./parse-common.js";
 
 export { CodeParseError };
@@ -53,9 +56,10 @@ function logicalLines(src) {
   let atLineStart = true;
   const brackets = []; // [char, line]
 
-  const flush = () => {
+  let startOffset = 0;
+  const flush = (endOffset) => {
     const t = text.trim();
-    if (t) lines.push({ text: t, indent, line: startLine });
+    if (t) lines.push({ text: t, indent, line: startLine, start: startOffset, end: endOffset });
     text = "";
     atLineStart = true;
   };
@@ -72,6 +76,7 @@ function logicalLines(src) {
       }
       indent = width;
       startLine = line;
+      startOffset = i;
       atLineStart = false;
       continue;
     }
@@ -95,7 +100,7 @@ function logicalLines(src) {
         if (!/[([{]$/.test(text) && !/^[)\]}]/.test(src[i] || "")) text += " ";
         continue;
       }
-      flush();
+      flush(i - 1);
       continue;
     }
 
@@ -146,7 +151,7 @@ function logicalLines(src) {
     const [open, at] = brackets[brackets.length - 1];
     fail("neverClosed", at, open);
   }
-  flush();
+  flush(n);
   return lines;
 }
 
@@ -204,11 +209,12 @@ function simpleStatement(text) {
   const out = OUTPUT.exec(text);
   if (out) {
     const args = splitTopLevel(out[1]).filter((a) => !/^(?:sep|end|file|flush)\s*=/.test(a));
-    return [node("OutputNode", args.length === 1 ? ioText(args[0]) : args.join(", "))];
+    const n = node("OutputNode", args.length === 1 ? ioText(args[0]) : args.join(", "));
+    return [withOrigin(n, "python", text)];
   }
   const assign = ASSIGNMENT.exec(text);
   if (assign && READ.test(assign[2].trim())) {
-    return [node("InputNode", assign[1].replace(/\s+/g, ""))];
+    return [withOrigin(node("InputNode", assign[1].replace(/\s+/g, "")), "python", text)];
   }
   return [node("TaskNode", text)];
 }
@@ -240,7 +246,9 @@ class Parser {
       const l = this.lines[this.pos];
       if (l.indent < indent) break;
       if (l.indent > indent) fail("indentUnexpected", l.line);
-      items.push(...this.statement());
+      const nodes = this.statement();
+      setSpan(nodes, l.start, this.lines[this.pos - 1]?.end);
+      items.push(...nodes);
     }
     return items;
   }
@@ -496,5 +504,6 @@ export function parsePython(source, options = {}) {
   const first = lines[0];
   const items = first ? parser.block(first.indent) : [];
   if (parser.pos < lines.length) fail("indentMismatch", lines[parser.pos].line);
-  return chain(unwrapMain(items, (n) => n.type === "TaskNode" && /^main\s*\(\s*\)$/.test(n.text)));
+  const algorithm = unwrapMain(items, (n) => n.type === "TaskNode" && /^main\s*\(\s*\)$/.test(n.text));
+  return attachFrame(chain(algorithm), algorithm, source || "", "python");
 }
