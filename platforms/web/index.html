@@ -56,42 +56,6 @@
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }
 
-    .code-section {
-      margin-top: 16px;
-      background: #fff;
-      border-radius: 6px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      overflow: hidden;
-    }
-    .code-tabs {
-      display: flex;
-      border-bottom: 1px solid #d6d6d6;
-      background: #f5f5f5;
-    }
-    .code-tabs button {
-      padding: 8px 18px;
-      border: none;
-      background: none;
-      cursor: pointer;
-      font-size: 13px;
-      font-family: inherit;
-      color: #3c3c3c;
-      border-bottom: 2px solid transparent;
-    }
-    .code-tabs button:hover { color: #004c45; }
-    .code-tabs button.active {
-      color: #004c45;
-      border-bottom-color: #017460;
-      font-weight: 600;
-    }
-    .code-output {
-      padding: 16px;
-      font-family: "Fira Code", "Consolas", monospace;
-      font-size: 13px;
-      line-height: 1.5;
-      white-space: pre-wrap;
-      min-height: 60px;
-    }
     footer {
       text-align: center;
       padding: 20px 16px;
@@ -128,15 +92,6 @@ function factorial(n):
         result = n * factorial(n - 1)
       </script>
     </struktolab-editor>
-
-    <div class="code-section">
-      <div class="code-tabs">
-        <button class="active" data-lang="python">Python</button>
-        <button data-lang="java">Java</button>
-        <button data-lang="javascript">JavaScript</button>
-      </div>
-      <pre class="code-output" id="code-output"></pre>
-    </div>
 
     <footer>
       Built with ❤️ by <a href="https://openpatch.org" target="_blank">OpenPatch</a>

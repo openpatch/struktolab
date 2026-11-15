@@ -6,7 +6,7 @@
  * scale. That envelope is what a `.struktolab` file contains, and what the web
  * app packs into the URL hash.
  *
- *   { version: 2, model: <tree | null>, settings: { lang, fontSize, colorMode, scale } }
+ *   { version: 2, model: <tree | null>, settings: { lang, fontSize, colorMode, scale, codeMode } }
  */
 
 export const DOCUMENT_VERSION = 2;
@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS = {
   fontSize: "14",
   colorMode: "color",
   scale: "1",
+  codeMode: "pseudocode",
 };
 
 /** Read the current state of an editor element as a document envelope. */
@@ -28,6 +29,7 @@ export function serializeDocument(editor) {
       fontSize: editor.getAttribute("font-size") || DEFAULT_SETTINGS.fontSize,
       colorMode: editor.getAttribute("color-mode") || DEFAULT_SETTINGS.colorMode,
       scale: editor.getAttribute("scale") || DEFAULT_SETTINGS.scale,
+      codeMode: editor.getAttribute("code-mode") || DEFAULT_SETTINGS.codeMode,
     },
   };
 }
@@ -51,6 +53,10 @@ export function applyDocument(editor, doc) {
   if (settings.fontSize) editor.setAttribute("font-size", settings.fontSize);
   if (settings.colorMode) editor.setAttribute("color-mode", settings.colorMode);
   if (settings.scale) editor.setAttribute("scale", settings.scale);
+  if (settings.codeMode) {
+    // The editor falls back to pseudocode for a mode it does not know.
+    editor.setAttribute("code-mode", settings.codeMode);
+  }
 
   // An empty structogram serializes to `null` — there is nothing to load, and
   // the editor's own empty root is exactly the right thing to leave in place.

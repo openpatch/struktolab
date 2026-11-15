@@ -1,3 +1,4 @@
+
 /**
  * Serialize a struktog tree back to pseudocode text.
  * Inverse of parsePseudocode.
@@ -104,8 +105,9 @@ function serialize(node, level, lines, kw) {
       return;
 
     case "FunctionNode": {
-      const params = (node.parameters || []).map(p => p.parName).join(", ");
-      lines.push(ind(level) + kw.function + " " + (node.text || "") + "(" + params + "):");
+      const params = (node.parameters || []).map((p) => p.parName).join(", ");
+      const returns = node.returnType ? " -> " + node.returnType : "";
+      lines.push(ind(level) + kw.function + " " + (node.text || "") + "(" + params + ")" + returns + ":");
       serialize(node.child, level + 1, lines, kw);
       serialize(node.followElement, level, lines, kw);
       return;

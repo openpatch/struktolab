@@ -9,12 +9,64 @@ import {
   KEYWORDS_EN,
 } from "../common/pseudocode-parser.js";
 import { generateCode } from "../common/code-generator.js";
+import { parseJava, parseJavaScript } from "../common/brace-parser.js";
+import { parsePython } from "../common/python-parser.js";
+import { functionHeader, parseFunctionHeader } from "../common/function-signature.js";
+import {
+  EditorView,
+  Decoration,
+  keymap,
+  lineNumbers,
+  highlightActiveLineGutter,
+  drawSelection,
+  placeholder as cmPlaceholder,
+} from "@codemirror/view";
+import { EditorState, Compartment, StateEffect, StateField } from "@codemirror/state";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import {
+  indentUnit,
+  indentOnInput,
+  bracketMatching,
+  syntaxHighlighting,
+  defaultHighlightStyle,
+} from "@codemirror/language";
+import { java } from "@codemirror/lang-java";
+import { python } from "@codemirror/lang-python";
+import { javascript } from "@codemirror/lang-javascript";
+
+/**
+ * What the code area under the diagram shows. Every language is two-way:
+ * typing in it builds the diagram, editing the diagram rewrites it.
+ */
+const CODE_MODES = ["none", "pseudocode", "java", "python", "javascript"];
+
+/** Source-code parsers by code mode; pseudocode has its own keywords. */
+const CODE_PARSERS = { java: parseJava, python: parsePython, javascript: parseJavaScript };
+
+/** Marks the line a parse error is on; `null` clears it. */
+const setErrorLine = StateEffect.define();
+const errorLineField = StateField.define({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    deco = deco.map(tr.changes);
+    for (const e of tr.effects) {
+      if (!e.is(setErrorLine)) continue;
+      const n = e.value;
+      if (n == null || n < 1 || n > tr.state.doc.lines) return Decoration.none;
+      const line = tr.state.doc.line(n);
+      return Decoration.set([Decoration.line({ class: "cm-error-line" }).range(line.from)]);
+    }
+    return deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
 import { treeToPseudocode } from "../common/tree-to-pseudocode.js";
 import {
   ensureIds,
   insertAt,
   removeNode,
   editText,
+  editFunctionHeader,
   moveNode,
   findNode,
   cloneTree,
@@ -69,6 +121,18 @@ const UI_STRINGS = {
     greyscale: "Graustufen",
     blackWhite: "Schwarz-Weiß",
     placeholder: "Pseudocode...",
+    javaPlaceholder:
+      "Java-Code, z. B.\n\npublic class Programm {\n    public static void main(String[] args) {\n        ...\n    }\n}",
+    pythonPlaceholder: "Python-Code, z. B.\n\nn = int(input(\"Zahl n: \"))\nfor i in range(n):\n    print(i)",
+    javascriptPlaceholder: "JavaScript-Code, z. B.\n\nconst n = Number(prompt(\"Zahl n\"))\nfor (let i = 0; i < n; i++) {\n    console.log(i)\n}",
+    codeMode: "Code",
+    codeModes: {
+      none: "Kein Code",
+      pseudocode: "Pseudocode",
+      java: "Java",
+      python: "Python",
+      javascript: "JavaScript",
+    },
     editorAria:
       "Struktogramm-Editor. Pfeiltasten bewegen zwischen Knoten, Enter bearbeitet, Plus fügt ein, Entfernen löscht.",
     structogram: "Struktogramm",
@@ -87,6 +151,9 @@ const UI_STRINGS = {
     placeHint: "Wähle die Stelle, an die „{label}“ soll.",
     moveHint: "Wähle die neue Stelle für den Block.",
     cancel: "Abbrechen",
+    switchLanguage:
+      "Mit {lang} beginnt ein neues, leeres Struktogramm – das aktuelle wird nicht übersetzt. Speichere es vorher, wenn du es behalten willst.",
+    switchLanguageConfirm: "Neu beginnen",
     parseError: "Syntaxfehler: ",
     nodeLabels: {
       TaskNode: "Anweisung",
@@ -135,6 +202,18 @@ const UI_STRINGS = {
     greyscale: "Greyscale",
     blackWhite: "Black & White",
     placeholder: "Pseudocode...",
+    javaPlaceholder:
+      "Java code, e.g.\n\npublic class Program {\n    public static void main(String[] args) {\n        ...\n    }\n}",
+    pythonPlaceholder: "Python code, e.g.\n\nn = int(input(\"Number n: \"))\nfor i in range(n):\n    print(i)",
+    javascriptPlaceholder: "JavaScript code, e.g.\n\nconst n = Number(prompt(\"Number n\"))\nfor (let i = 0; i < n; i++) {\n    console.log(i)\n}",
+    codeMode: "Code",
+    codeModes: {
+      none: "No code",
+      pseudocode: "Pseudocode",
+      java: "Java",
+      python: "Python",
+      javascript: "JavaScript",
+    },
     editorAria:
       "Structogram editor. Arrow keys move between nodes, Enter edits, Plus inserts, Delete removes.",
     structogram: "Structogram",
@@ -153,6 +232,9 @@ const UI_STRINGS = {
     placeHint: "Pick where the {label} should go.",
     moveHint: "Pick the new place for the block.",
     cancel: "Cancel",
+    switchLanguage:
+      "{lang} starts a new, empty structogram – the current one is not translated. Save it first if you want to keep it.",
+    switchLanguageConfirm: "Start new",
     parseError: "Parse error: ",
     nodeLabels: {
       TaskNode: "Task",
@@ -344,6 +426,17 @@ input[type="number"] { width: 60px; }
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
 }
 .popover label { justify-content: flex-end; }
+.popover .notice {
+  grid-column: 1 / -1;
+  max-width: 240px;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  background: #fff8e1;
+  border: 1px solid #f0c36d;
+  border-radius: 3px;
+}
+.popover .notice .actions { display: flex; gap: 6px; margin-top: 6px; }
 
 /* Narrow viewports: the icons carry the meaning, the titles carry the words. */
 @media (max-width: 760px) {
@@ -469,26 +562,34 @@ input[type="number"] { width: 60px; }
 
 .pseudocode-area {
   border: 1px solid var(--toolbar-border);
+  border-top: none;
   border-radius: 0 0 4px 4px;
 }
-.pseudocode-area textarea {
-  display: block;
-  width: 100%;
-  min-height: 120px;
-  max-height: 400px;
-  padding: 8px;
-  border: none;
-  font-family: "Fira Code", "Consolas", monospace;
-  font-size: 13px;
-  line-height: 1.5;
+.code-editor {
+  height: 180px;
+  min-height: 80px;
   resize: vertical;
-  box-sizing: border-box;
-  outline: none;
-  tab-size: 4;
+  overflow: hidden;
 }
-.pseudocode-area textarea:focus {
+/* A program in Java, Python or JavaScript is longer than its pseudocode. */
+.pseudocode-area.java .code-editor,
+.pseudocode-area.python .code-editor,
+.pseudocode-area.javascript .code-editor { height: 340px; }
+.code-editor .cm-editor { height: 100%; font-size: 13px; background: #fff; }
+.code-editor .cm-editor.cm-focused {
+  outline: none;
   box-shadow: inset 0 0 0 2px rgba(1, 116, 96, 0.3);
 }
+.code-editor .cm-scroller {
+  font-family: "Fira Code", "Consolas", monospace;
+  line-height: 1.5;
+}
+.code-editor .cm-gutters { background: var(--toolbar-bg); border-right: 1px solid var(--toolbar-border); color: #777; }
+.code-editor .cm-activeLineGutter { background: #e2f2ee; color: #333; }
+.code-editor .cm-error-line { background: #fdecea; }
+.code-editor .cm-placeholder { color: #999; }
+/* "No code": the diagram alone. */
+.pseudocode-area.none { display: none; }
 .pseudocode-area .error {
   color: var(--danger);
   font-size: 12px;
@@ -522,7 +623,7 @@ input[type="number"] { width: 60px; }
  */
 class StruktolabEditor extends HTMLElement {
   static get observedAttributes() {
-    return ["scale", "font-size", "src", "lang", "color-mode", "embedded"];
+    return ["scale", "font-size", "src", "lang", "color-mode", "embedded", "code-mode"];
   }
 
   constructor() {
@@ -530,6 +631,11 @@ class StruktolabEditor extends HTMLElement {
     this._tree = null;
     this._keywords = null;
     this._mode = null; // null | "place:TYPE" | "move:ID"
+    /**
+     * The language the structogram is written in. "No code" only hides the
+     * code, so this remembers the language behind it. Null until there is one.
+     */
+    this._codeLanguage = null;
     this._syncing = false; // guard against circular updates
     this._debounceTimer = null;
 
@@ -574,13 +680,14 @@ class StruktolabEditor extends HTMLElement {
     );
     this._shadow.appendChild(this._editorArea);
 
-    // Pseudocode area
+    // Code area: pseudocode, Java, Python or JavaScript, in sync with the diagram
     this._pseudoArea = document.createElement("div");
     this._pseudoArea.className = "pseudocode-area";
-    this._textarea = document.createElement("textarea");
-    this._textarea.spellcheck = false;
-    this._textarea.placeholder = this._t("placeholder");
-    this._pseudoArea.appendChild(this._textarea);
+    this._codeHost = document.createElement("div");
+    this._codeHost.className = "code-editor";
+    this._pseudoArea.appendChild(this._codeHost);
+    this._createCodeView();
+    this._applyCodeMode();
     this._errorEl = document.createElement("div");
     this._errorEl.className = "error";
     this._errorEl.style.display = "none";
@@ -592,46 +699,6 @@ class StruktolabEditor extends HTMLElement {
     this._overlay.className = "text-overlay";
     this._overlay.style.display = "none";
     this._editorArea.appendChild(this._overlay);
-
-    // Events
-    this._textarea.addEventListener("input", () => this._onPseudocodeInput());
-    this._textarea.addEventListener("blur", () => this._syncPseudocodeToTree());
-    this._textarea.addEventListener("keydown", (e) => {
-      if (e.key === "Tab") {
-        e.preventDefault();
-        const ta = this._textarea;
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        if (e.shiftKey) {
-          // Outdent: remove leading 4 spaces or tab on current line
-          const before = ta.value.substring(0, start);
-          const lineStart = before.lastIndexOf("\n") + 1;
-          const line = ta.value.substring(lineStart);
-          if (line.startsWith("    ")) {
-            ta.value =
-              ta.value.substring(0, lineStart) +
-              ta.value.substring(lineStart + 4);
-            ta.selectionStart = ta.selectionEnd = Math.max(
-              lineStart,
-              start - 4,
-            );
-          } else if (line.startsWith("\t")) {
-            ta.value =
-              ta.value.substring(0, lineStart) +
-              ta.value.substring(lineStart + 1);
-            ta.selectionStart = ta.selectionEnd = Math.max(
-              lineStart,
-              start - 1,
-            );
-          }
-        } else {
-          ta.value =
-            ta.value.substring(0, start) + "    " + ta.value.substring(end);
-          ta.selectionStart = ta.selectionEnd = start + 4;
-        }
-        ta.dispatchEvent(new Event("input"));
-      }
-    });
 
     this._shadow.addEventListener("keydown", (e) => this._onShortcut(e));
     // A click anywhere that is not the popover or the menu dismisses them.
@@ -657,7 +724,9 @@ class StruktolabEditor extends HTMLElement {
   _onShortcut(e) {
     const target = e.composedPath()[0];
     const inTextField =
-      target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement;
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLInputElement ||
+      Boolean(target && target.isContentEditable); // the code editor
 
     if (e.key === "Escape") {
       if (this._typeMenu) {
@@ -715,6 +784,20 @@ class StruktolabEditor extends HTMLElement {
 
   _initialize() {
     if (!this._tree) {
+      // <script type="text/plain" data-code="java|python|javascript">
+      const codeScript = this.querySelector("script[data-code]");
+      const mode = codeScript?.dataset.code;
+      if (codeScript && CODE_PARSERS[mode]) {
+        try {
+          this._tree = this._prepTree(this._parseCode(codeScript.textContent, mode));
+          if (!this.hasAttribute("code-mode")) this.setAttribute("code-mode", mode);
+          this._emitChange();
+        } catch (e) {
+          console.error(`struktolab-editor: failed to parse ${mode}`, e);
+        }
+      }
+    }
+    if (!this._tree) {
       const pseudoScript = this.querySelector('script[type="text/pseudocode"]');
       if (pseudoScript) {
         try {
@@ -758,6 +841,13 @@ class StruktolabEditor extends HTMLElement {
       this._fetchTree(newVal);
     } else if (name === "embedded") {
       this._applyEmbedded();
+    } else if (name === "code-mode") {
+      if (CODE_MODES.includes(newVal) && newVal !== "none") this._codeLanguage = newVal;
+      this._applyCodeMode();
+      if (this._tree) {
+        this._syncTreeToPseudocode();
+        this._render(); // function headers read like the code beside them
+      }
     } else {
       if (name === "lang") {
         // Every toolbar and menu label comes from _t(), so they are all stale
@@ -766,6 +856,7 @@ class StruktolabEditor extends HTMLElement {
         const popoverOpen =
           this._viewPopover && this._viewPopover.style.display !== "none";
         this._rebuildToolbar();
+        this._applyCodeMode();
         if (popoverOpen) {
           this._toggleViewPopover(true);
           this._langSelect?.focus();
@@ -804,6 +895,48 @@ class StruktolabEditor extends HTMLElement {
     this._resetHistory();
     this._render();
     this._syncTreeToPseudocode();
+  }
+
+  /**
+   * Build the structogram from source code and show that code.
+   * @param {string} code
+   * @param {"java"|"python"|"javascript"|"pseudocode"} mode
+   * @throws {CodeParseError} with a `.line` when the code cannot be read
+   */
+  loadCode(code, mode) {
+    if (!CODE_MODES.includes(mode) || mode === "none") {
+      throw new Error(`struktolab-editor: cannot load code as "${mode}"`);
+    }
+    this._tree = this._prepTree(this._parseCode(code, mode));
+    this._resetHistory();
+    this.codeMode = mode;
+    this._render();
+    this._syncTreeToPseudocode();
+    // Keep the code as it was written, not as the generator would write it.
+    this._setCode(code);
+    this._emitChange();
+  }
+
+  /**
+   * What the code area below the diagram shows: "none", or the language it is
+   * written in — "pseudocode", "java", "python", "javascript".
+   */
+  get codeMode() {
+    const mode = this.getAttribute("code-mode");
+    return CODE_MODES.includes(mode) ? mode : "pseudocode";
+  }
+  set codeMode(mode) {
+    this.setAttribute("code-mode", CODE_MODES.includes(mode) ? mode : "pseudocode");
+  }
+
+  /** Function headers read like the code beside them: Java puts the type in front. */
+  _functionStyle() {
+    return this.codeMode === "java" ? "java" : "arrow";
+  }
+
+  _parseCode(code, mode) {
+    if (mode === "pseudocode") return parsePseudocode(code, this._getKeywords());
+    return CODE_PARSERS[mode](code, { lang: this._uiLang() });
   }
 
   toCode(lang) {
@@ -1058,12 +1191,26 @@ class StruktolabEditor extends HTMLElement {
     row(this._t("colours"), colorModeSelect);
     this._colorModeSelect = colorModeSelect;
 
+    const codeModeSelect = document.createElement("select");
+    const names = this._t("codeModes");
+    for (const mode of CODE_MODES) {
+      const option = document.createElement("option");
+      option.value = mode;
+      option.textContent = names[mode];
+      codeModeSelect.appendChild(option);
+    }
+    codeModeSelect.value = this.codeMode;
+    codeModeSelect.addEventListener("change", () => this._switchCodeMode(codeModeSelect.value));
+    row(this._t("codeMode"), codeModeSelect);
+    this._codeModeSelect = codeModeSelect;
+
     return pop;
   }
 
   _toggleViewPopover(force) {
     const open = force ?? this._viewPopover.style.display === "none";
     this._viewPopover.style.display = open ? "grid" : "none";
+    if (!open) this._dismissLanguageNotice();
     this._viewBtn.classList.toggle("active", open);
     this._viewBtn.setAttribute("aria-expanded", String(open));
   }
@@ -1221,17 +1368,12 @@ class StruktolabEditor extends HTMLElement {
       fontSize,
       colorMode,
       keywords: this._getKeywords(),
+      functionStyle: this._functionStyle(),
       layout: this._slotLayout,
       closedSlots: this._closedSlots,
     });
     setEmptyBranchHeight(0);
     setInsertNodeHeight(0);
-    // Room under the diagram for the "add at the end" place. Not part of the
-    // diagram itself, so exports leave it out.
-    const vb = svg.viewBox.baseVal;
-    if (!carrying && this._tree?.followElement?.type !== "Placeholder") {
-      svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.width} ${vb.height + this._tailHeight()}`);
-    }
 
     svg.setAttribute("role", "group");
     svg.setAttribute("aria-label", this._t("structogram"));
@@ -1565,12 +1707,7 @@ class StruktolabEditor extends HTMLElement {
         return totalH + followH;
       }
       case "FunctionNode": {
-        let headerText = node.text || "";
-        if (node.parameters && node.parameters.length) {
-          headerText +=
-            "(" + node.parameters.map((p) => p.parName || "").join(", ") + ")";
-        } else headerText += "()";
-        headerText += " {";
+        const headerText = functionHeader(node, this._functionStyle()) + " {";
         const rowH = wrappedH(headerText);
         const innerW = width - LOOP_INDENT;
         const childH = this._layoutNode(
@@ -1714,12 +1851,11 @@ class StruktolabEditor extends HTMLElement {
   /* ── Insert targets ─────────────────────────────────────── */
 
 
-  /* ── Empty places, always visible ───────────────────────── */
+  /* ── The empty diagram's place ──────────────────────────── */
 
   /**
-   * An empty diagram, an empty branch, an empty loop body: places that have
-   * nothing in them to point at. Each gets a quiet "+" that is always there —
-   * hover cannot be relied on, a finger has none — and opens the block menu.
+   * An empty diagram has nothing in it to point at, so it gets a quiet "+"
+   * that is always there and opens the block menu.
    */
   _addEmptySlotTargets(svg) {
     const svgNS = "http://www.w3.org/2000/svg";
@@ -2240,9 +2376,13 @@ class StruktolabEditor extends HTMLElement {
     this._overlay.style.height = h + "px";
     this._overlay.innerHTML = "";
 
+    // A function's header is edited as one line, in its language's order:
+    // "int max(int a, int b)" in Java, "max(a: int, b: int) -> int" elsewhere.
+    const isFunction = node.type === "FunctionNode";
+    const original = isFunction ? functionHeader(node, this._functionStyle()) : node.text || "";
     const input = document.createElement("textarea");
-    input.value = node.text || "";
-    input.rows = Math.max(2, (node.text || "").split("\n").length);
+    input.value = original;
+    input.rows = Math.max(2, original.split("\n").length);
     input.style.height = "100%";
     input.style.resize = "none";
 
@@ -2256,7 +2396,12 @@ class StruktolabEditor extends HTMLElement {
 
     const commit = () => {
       this._hideEditOverlay();
-      if (input.value === (node.text || "")) return;
+      if (input.value === original) return;
+      if (isFunction) {
+        const header = parseFunctionHeader(input.value, this._functionStyle());
+        this._commit(editFunctionHeader(this._tree, nodeId, header));
+        return;
+      }
       this._commit(editText(this._tree, nodeId, input.value));
     };
     const cancel = () => this._hideEditOverlay();
@@ -2309,14 +2454,8 @@ class StruktolabEditor extends HTMLElement {
         return wrappedH(node.text || "");
       case "FootLoopNode":
         return wrappedH(node.text || "");
-      case "FunctionNode": {
-        let t = node.text || "";
-        if (node.parameters && node.parameters.length)
-          t +=
-            "(" + node.parameters.map((p) => p.parName || "").join(", ") + ")";
-        else t += "()";
-        return wrappedH(t);
-      }
+      case "FunctionNode":
+        return wrappedH(functionHeader(node, this._functionStyle()) + " {");
       case "TryCatchNode":
         return wrappedH(node.text || "");
       default:
@@ -2477,11 +2616,9 @@ class StruktolabEditor extends HTMLElement {
       if (carrying) {
         h = slot.alone && avail > b.h ? avail : b.h;
       } else if (slot.alone && slot.depth === 0) {
+        // Only an empty diagram keeps a place to click into at all times;
+        // everywhere else the palette and each block's "+" do the adding.
         h = EMPTY_BRANCH_HEIGHT;
-      } else if (slot.alone && avail >= 10) {
-        h = avail;
-      } else if (slot.trailing && slot.depth === 0) {
-        h = this._tailHeight();
       }
       if (h <= 0) continue;
       zones.push({ id, x: b.x, w: b.w, top: b.y, bottom: b.y + h, depth: slot.depth });
@@ -2579,10 +2716,6 @@ class StruktolabEditor extends HTMLElement {
   }
 
   /** Room under the diagram for adding at the end. */
-  _tailHeight() {
-    return this._coarsePointer ? 48 : 36;
-  }
-
   /** A round "+" that can be hidden, quiet, or lit. */
   _plusBadge(svgNS, cx, cy) {
     const r = this._coarsePointer ? 13 : 10;
@@ -2937,15 +3070,199 @@ class StruktolabEditor extends HTMLElement {
     document.addEventListener("pointercancel", onPointerUp);
   }
 
+  /* ── Code mode ──────────────────────────────────────────── */
+
+  /** Show the code area in the language of the `code-mode` attribute. */
+  _applyCodeMode() {
+    if (!this._codeView) return;
+    const mode = this.codeMode;
+    for (const m of CODE_MODES) this._pseudoArea.classList.toggle(m, mode === m);
+    if (this._codeModeSelect) this._codeModeSelect.value = mode;
+    this._codeView.dispatch({
+      effects: this._codeModeCompartment.reconfigure(this._codeModeExtensions(mode)),
+    });
+  }
+
+  /** The CodeMirror editor the code is written in. */
+  _createCodeView() {
+    this._codeModeCompartment = new Compartment();
+    this._settingCode = false;
+    this._codeView = new EditorView({
+      parent: this._codeHost,
+      // Inside a shadow root CodeMirror has to be told where to put its styles.
+      root: this._shadow,
+      state: EditorState.create({
+        doc: "",
+        extensions: [
+          lineNumbers(),
+          highlightActiveLineGutter(),
+          history(),
+          drawSelection(),
+          indentOnInput(),
+          bracketMatching(),
+          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+          indentUnit.of("    "),
+          EditorState.tabSize.of(4),
+          keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          errorLineField,
+          this._codeModeCompartment.of(this._codeModeExtensions(this.codeMode)),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged && !this._settingCode) this._onPseudocodeInput();
+            if (update.focusChanged && !update.view.hasFocus && this._debounceTimer) {
+              this._syncPseudocodeToTree();
+            }
+          }),
+        ],
+      }),
+    });
+  }
+
+  /** What differs between the modes: highlighting, placeholder, label. */
+  _codeModeExtensions(mode) {
+    const language = { java, python, javascript }[mode];
+    return [
+      language ? language() : [],
+      cmPlaceholder(this._t(language ? mode + "Placeholder" : "placeholder")),
+      EditorView.contentAttributes.of({
+        "aria-label": this._t("codeModes")[mode] || "",
+        spellcheck: "false",
+        autocorrect: "off",
+        autocapitalize: "off",
+      }),
+    ];
+  }
+
+  _getCode() {
+    return this._codeView.state.doc.toString();
+  }
+
+  /** Replace the code without it counting as typing. */
+  _setCode(code) {
+    const view = this._codeView;
+    if (view.state.doc.toString() === code) return;
+    this._settingCode = true;
+    try {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: code },
+        effects: setErrorLine.of(null),
+      });
+    } finally {
+      this._settingCode = false;
+    }
+  }
+
+  _showCodeError(message, line) {
+    this._errorEl.textContent = this._t("parseError") + message;
+    this._errorEl.style.display = "block";
+    this._codeView.dispatch({ effects: setErrorLine.of(line ?? null) });
+  }
+
+  _clearCodeError() {
+    this._errorEl.style.display = "none";
+    this._codeView.dispatch({ effects: setErrorLine.of(null) });
+  }
+
+  /**
+   * A structogram is written in one language, and the texts in its blocks
+   * are that language's — `i++`, `int x = 1`. Nothing translates them, so
+   * moving to another language starts over, after asking. Hiding the code
+   * ("No code") or picking a language for an empty diagram just happens.
+   */
+  _switchCodeMode(mode) {
+    this._dismissLanguageNotice();
+    if (mode === this.codeMode) return;
+    // Whatever was typed but not yet read belongs to the mode it was typed in.
+    if (this._debounceTimer) this._syncPseudocodeToTree();
+    const from = this._codeLanguage;
+    if (mode !== "none" && from && from !== mode && !this._isEmpty()) {
+      this._askLanguageSwitch(mode);
+      return;
+    }
+    this.codeMode = mode;
+    this._emitChange(); // the mode is part of the saved document
+  }
+
+  _isEmpty() {
+    const first = this._tree?.followElement;
+    return !first || first.type === "Placeholder";
+  }
+
+  /** "Python starts a new, empty structogram … [Start new] [Cancel]", under the select. */
+  _askLanguageSwitch(mode) {
+    const notice = document.createElement("div");
+    notice.className = "notice";
+    notice.setAttribute("role", "alert");
+    const text = document.createElement("div");
+    text.textContent = this._t("switchLanguage").replace("{lang}", this._t("codeModes")[mode]);
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className = "danger";
+    confirm.textContent = this._t("switchLanguageConfirm");
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = this._t("cancel");
+    actions.append(confirm, cancel);
+    notice.append(text, actions);
+
+    confirm.addEventListener("click", () => {
+      this._dismissLanguageNotice();
+      this._tree = ensureIds({
+        id: "__root",
+        type: "InsertNode",
+        followElement: { type: "Placeholder" },
+      });
+      // A structogram in another language, not an edit of this one.
+      this._resetHistory();
+      this._codeLanguage = mode;
+      this.codeMode = mode;
+      this._render();
+      this._syncTreeToPseudocode();
+      this._emitChange();
+      // Done with the settings: straight to writing the new structogram.
+      this._toggleViewPopover(false);
+      this._codeView.focus();
+    });
+    cancel.addEventListener("click", () => {
+      this._dismissLanguageNotice();
+      this._codeModeSelect?.focus();
+    });
+
+    this._languageNotice = notice;
+    this._viewPopover.appendChild(notice);
+    confirm.focus();
+  }
+
+  _dismissLanguageNotice() {
+    if (!this._languageNotice) return;
+    this._languageNotice.remove();
+    this._languageNotice = null;
+    // The select shows what was picked; put it back to what is in force.
+    if (this._codeModeSelect) this._codeModeSelect.value = this.codeMode;
+  }
+
+  /** The tree as text in the current code mode. */
+  _treeToCode() {
+    const mode = this.codeMode;
+    if (mode === "none") return "";
+    if (mode === "pseudocode") return treeToPseudocode(this._tree, this._getKeywords());
+    return generateCode(this._tree, mode);
+  }
+
+  /** Text in the current code mode as a tree. */
+  _codeToTree(code) {
+    return this._parseCode(code, this.codeMode);
+  }
+
   /* ── Pseudocode sync ────────────────────────────────────── */
 
   _syncTreeToPseudocode() {
     if (this._syncing) return;
     this._syncing = true;
     try {
-      const code = treeToPseudocode(this._tree, this._getKeywords());
-      this._textarea.value = code;
-      this._errorEl.style.display = "none";
+      this._setCode(this._treeToCode());
+      this._clearCodeError();
     } catch (e) {
       // ignore serialization errors
     }
@@ -2961,23 +3278,26 @@ class StruktolabEditor extends HTMLElement {
     if (this._syncing) return;
     this._syncing = true;
     clearTimeout(this._debounceTimer);
+    this._debounceTimer = null;
+    // With no code shown, there is nothing typed to read back.
+    if (this.codeMode === "none") {
+      this._syncing = false;
+      return;
+    }
     try {
-      const code = this._textarea.value;
+      const code = this._getCode();
       if (!code.trim()) {
         this._syncing = false;
         return;
       }
-      const newTree = this._prepTree(
-        parsePseudocode(code, this._getKeywords()),
-      );
+      const newTree = this._prepTree(this._codeToTree(code));
       this._pushHistory();
       this._tree = newTree;
-      this._errorEl.style.display = "none";
+      this._clearCodeError();
       this._render();
       this._emitChange();
     } catch (e) {
-      this._errorEl.textContent = this._t("parseError") + e.message;
-      this._errorEl.style.display = "block";
+      this._showCodeError(e.message, e.line);
     }
     this._syncing = false;
   }
@@ -3037,7 +3357,13 @@ class StruktolabEditor extends HTMLElement {
 
     // Render a clean SVG (no insert-node space, no overlays)
     setInsertNodeHeight(0);
-    const svg = renderStructogramSVG(this._tree, { width, fontSize, colorMode, keywords: this._getKeywords() });
+    const svg = renderStructogramSVG(this._tree, {
+      width,
+      fontSize,
+      colorMode,
+      keywords: this._getKeywords(),
+      functionStyle: this._functionStyle(),
+    });
     setInsertNodeHeight(0);
 
     const serializer = new XMLSerializer();
@@ -3154,6 +3480,9 @@ export {
   StruktolabEditor,
   renderStructogramSVG,
   parsePseudocode,
+  parseJava,
+  parseJavaScript,
+  parsePython,
   generateCode,
   treeToPseudocode,
   KEYWORDS_DE,

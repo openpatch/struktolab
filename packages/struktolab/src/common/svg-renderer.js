@@ -1,4 +1,5 @@
 import { KEYWORDS_DE } from "./pseudocode-parser.js";
+import { functionHeader } from "./function-signature.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -73,6 +74,9 @@ let _insertNodeHeight = 0;
 let _layoutSink = null;
 /* Slots that stay closed even while the editor opens the others. */
 let _closedSlots = null;
+
+/* How function headers read: "arrow" (`max(a, b) -> int`) or "java" (`int max(a, b)`). */
+let _functionStyle = "arrow";
 
 /* An if/else with both branches empty has no body; the editor gives it one. */
 let _emptyBranchHeight = 0;
@@ -289,14 +293,7 @@ function measureHeight(node, fontSize, width) {
     }
     case "FunctionNode": {
       const innerW = width - LOOP_INDENT;
-      let headerText = node.text || "";
-      if (node.parameters && node.parameters.length > 0) {
-        headerText +=
-          "(" + node.parameters.map((p) => p.parName || "").join(", ") + ")";
-      } else {
-        headerText += "()";
-      }
-      headerText += " {";
+      const headerText = functionHeader(node, _functionStyle) + " {";
       const rowH = wrappedTextHeight(headerText, textW, fontSize);
       const childH = measureHeight(node.child, fontSize, innerW);
       const bodyH = Math.max(childH, rowH * 0.5);
@@ -772,14 +769,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
 
     case "FunctionNode": {
       const color = getColor(node.type);
-      let headerText = node.text || "";
-      if (node.parameters && node.parameters.length > 0) {
-        const params = node.parameters.map((p) => p.parName || "").join(", ");
-        headerText += "(" + params + ")";
-      } else {
-        headerText += "()";
-      }
-      headerText += " {";
+      const headerText = functionHeader(node, _functionStyle) + " {";
 
       const rowH = wrappedTextHeight(headerText, textW, fontSize);
 
@@ -951,6 +941,7 @@ function renderNode(node, x, y, width, fontSize, availH) {
  * @param {number} [options.fontSize=14] - Font size in px
  * @param {string} [options.colorMode] - "color" (default) or "bw" for black-and-white colors
  * @param {Object} [options.keywords=KEYWORDS_DE] - Keyword map for the true/false labels
+ * @param {"arrow"|"java"} [options.functionStyle="arrow"] - function headers as `max(a, b) -> int` or `int max(a, b)`
  * @returns {SVGSVGElement}
  */
 export function renderStructogramSVG(tree, options = {}) {
@@ -960,6 +951,7 @@ export function renderStructogramSVG(tree, options = {}) {
     COLOR_MODE = options.colorMode;
   }
   KEYWORDS = options.keywords || KEYWORDS_DE;
+  _functionStyle = options.functionStyle === "java" ? "java" : "arrow";
 
   const totalHeight = measureHeight(tree, fontSize, width);
   const h = totalHeight || 40;

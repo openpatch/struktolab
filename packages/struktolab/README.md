@@ -5,6 +5,7 @@ A free, web-based structogram (Nassi-Shneiderman diagram) editor with automatic 
 ## Features
 
 - 📝 Bidirectional pseudocode editing (visual ↔ text)
+- ☕ Write Java, Python or JavaScript and get the structogram built from it
 - ↩️ Undo and redo
 - ⌨️ Keyboard and screen reader access; works with mouse, pen and touch
 - 🌍 German and English pseudocode support
@@ -48,6 +49,23 @@ Full-featured visual editor with toolbar, pseudocode sync, and import/export.
   </script>
 </struktolab-editor>
 
+<!-- From Java, Python or JavaScript: the code area opens in that language -->
+<struktolab-editor font-size="14">
+  <script type="text/plain" data-code="java">
+    public class Fakultaet {
+        public static void main(String[] args) {
+            Scanner sc = new Scanner(System.in);
+            int n = sc.nextInt();
+            int f = 1;
+            for (int i = 2; i <= n; i++) {
+                f = f * i;
+            }
+            System.out.println(f);
+        }
+    }
+  </script>
+</struktolab-editor>
+
 <!-- From JSON -->
 <struktolab-editor font-size="14">
   <script type="application/json">
@@ -65,6 +83,7 @@ Full-featured visual editor with toolbar, pseudocode sync, and import/export.
 | `lang`      | Pseudocode language (`de` or `en`) | `de`    |
 | `src`       | URL to a JSON tree file            | —       |
 | `color-mode` | Color mode (`color`, `bw`)       | `color` |
+| `code-mode` | The language of the code area under the diagram — `pseudocode`, `java`, `python`, `javascript` — or `none` to hide it. Code and diagram stay in sync both ways. Also in the View settings. | `pseudocode` |
 | `embedded`  | The host owns the file: hides Save/Load, and PNG/SVG raise `export-image` instead of downloading | off |
 
 #### JavaScript API
@@ -78,6 +97,10 @@ console.log(editor.tree);
 
 // Pseudocode
 editor.pseudocode = 'eingabe("Zahl n")';
+
+// Code → structogram (throws a CodeParseError with .line on syntax errors)
+editor.loadCode('for i in range(10):\n    print(i)', 'python'); // 'java', 'python', 'javascript', 'pseudocode'
+editor.codeMode = 'java'; // what the code area shows: 'none', 'pseudocode', 'java', 'python', 'javascript'
 
 // Code generation
 editor.toCode('python');    // → Python code
@@ -158,7 +181,7 @@ a `.struktolab` file holds and the web app packs into a shareable URL.
 import { serializeDocument, applyDocument, emptyDocument } from 'struktolab/editor';
 
 const doc = serializeDocument(editor);
-// { version: 2, model: {...}, settings: { lang, fontSize, colorMode, scale } }
+// { version: 2, model: {...}, settings: { lang, fontSize, colorMode, scale, codeMode } }
 
 applyDocument(editor, doc);      // → true when a model was loaded
 applyDocument(editor, bareTree); // a plain tree works too, for older files
@@ -170,9 +193,10 @@ The same parsing, code generation and tree operations with no DOM behind them,
 for Node — a build script, a server, a VS Code extension host.
 
 ```js
-import { generateCode, parsePseudocode, treeToPseudocode } from 'struktolab/core';
+import { generateCode, parseJava, parseJavaScript, parsePython, parsePseudocode, treeToPseudocode } from 'struktolab/core';
 
 generateCode(model, 'python');
+parsePython(source, { lang: 'de' }); // → model; `lang` picks error messages and "bis"/"to"
 ```
 
 ### `<struktolab-renderer>`

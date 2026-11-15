@@ -68,6 +68,8 @@
  *       ...
  */
 
+import { splitParameters, toParameters } from "./function-signature.js";
+
 export const KEYWORDS_DE = {
   if: "falls", else: "sonst",
   repeat: "wiederhole", while: "solange", for: "für",
@@ -397,7 +399,7 @@ function mergeBlocks(lines, baseIndent, keywords) {
   const reWhilePrefix = new RegExp(`^${eWhile}\\s+`, "i");
   const reCountLoop = new RegExp(`^${eRepeat}\\s+${eFor}\\s+(.+)\\s*:$`, "i");
   const reHeadLoop = new RegExp(`^${eRepeat}\\s+${eWhile}\\s+(.+)\\s*:$`, "i");
-  const reFuncDef = new RegExp(`^${eFunction}\\s+(\\w+)\\s*\\(([^)]*)\\)\\s*:$`, "i");
+  const reFuncDef = new RegExp(`^${eFunction}\\s+(\\w+)\\s*\\(([^)]*)\\)\\s*(?:->\\s*(.+?)\\s*)?:$`, "i");
   const reSwitchBlock = new RegExp(`^${eSwitch}\\s+(.+)\\s*:$`, "i");
   const reCaseLabel = new RegExp(`^${eCase}\\s+(.+)\\s*:$`, "i");
   const reInput = new RegExp(`^${eInput}\\s*\\((.*)\\)$`, "i");
@@ -536,15 +538,17 @@ function mergeBlocks(lines, baseIndent, keywords) {
       const fname = funcMatch[1];
       const paramStr = funcMatch[2].trim();
       const parameters = paramStr
-        ? paramStr.split(",").map((p, idx) => ({ pos: String(idx * 3), parName: p.trim() }))
+        ? toParameters(splitParameters(paramStr))
         : [];
       const childIndent = baseIndent + 4;
       const childTree = mergeBlocks(block.children, childIndent, keywords);
-      const node = makeInsert({
+      const fnNode = {
         id: uid(), type: "FunctionNode", text: fname, parameters,
         child: childTree,
         followElement: tail,
-      });
+      };
+      if (funcMatch[3]) fnNode.returnType = funcMatch[3];
+      const node = makeInsert(fnNode);
       tail = node;
       continue;
     }

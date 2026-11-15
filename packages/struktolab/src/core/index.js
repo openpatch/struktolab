@@ -13,6 +13,9 @@ export {
   KEYWORDS_DE,
   KEYWORDS_EN,
 } from "../common/pseudocode-parser.js";
+export { parseJava, parseJavaScript } from "../common/brace-parser.js";
+export { parsePython } from "../common/python-parser.js";
+export { CodeParseError } from "../common/parse-common.js";
 export { treeToPseudocode } from "../common/tree-to-pseudocode.js";
 export {
   stripInsertNodes,

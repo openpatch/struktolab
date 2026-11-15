@@ -96,6 +96,12 @@ function parseCountRange(text) {
 /** The loop header for a count loop, without the surrounding brackets. */
 function countLoopHeader(text, lang) {
   const range = parseCountRange(text);
+  // "x in liste" walks a collection — Python's own spelling, Java's for-each.
+  const each = /^\s*([\p{L}_$][\p{L}\p{N}_$]*)\s+in\s+(.+?)\s*$/u.exec(text || "");
+  if (!range && each) {
+    if (lang === "java") return { header: `var ${each[1]} : ${each[2]}`, wrap: true };
+    if (lang === "javascript") return { header: `const ${each[1]} of ${each[2]}`, wrap: true };
+  }
   // Anything that is not a range stays exactly as the user wrote it.
   if (!range) return { header: text, wrap: true };
 
@@ -241,13 +247,19 @@ function transform(node, level, t, lang) {
 
     case "FunctionNode": {
       const params = (node.parameters || []).map((p) => p.parName).join(", ");
+      const returnType = node.returnType || "";
+      // Java names the return type in front, Python may annotate it behind,
+      // JavaScript has none.
+      const pre = lang === "java" ? `public ${returnType || "void"} ` : t.FunctionNode.pre;
+      const post =
+        lang === "python" && returnType ? `) -> ${returnType}:\n` : t.FunctionNode.post;
       lines.push(
         indent(level) +
-          t.FunctionNode.pre +
+          pre +
           text +
           t.FunctionNode.between +
           params +
-          t.FunctionNode.post +
+          post +
           (t.leftBracket ? " " + t.leftBracket + "\n" : ""),
       );
       lines.push(...body(node.child, level + 1, t, lang));

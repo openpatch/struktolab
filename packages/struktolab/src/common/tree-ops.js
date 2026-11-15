@@ -3,6 +3,8 @@
  * All operations return a new tree (immutable style via deep clone).
  */
 
+import { toParameters } from "./function-signature.js";
+
 let _idCounter = 0;
 
 /** Generate a unique ID for new nodes. */
@@ -203,6 +205,22 @@ export function editText(tree, nodeId, newText) {
   const root = cloneTree(tree);
   const node = findNode(root, nodeId);
   if (node) node.text = newText;
+  return root;
+}
+
+/**
+ * Set a function block's header from its parts.
+ * @param {{returnType: string, name: string, parameters: string[]}} header
+ */
+export function editFunctionHeader(tree, nodeId, header) {
+  const root = cloneTree(tree);
+  const node = findNode(root, nodeId);
+  if (node) {
+    node.text = header.name;
+    node.parameters = toParameters(header.parameters);
+    if (header.returnType) node.returnType = header.returnType;
+    else delete node.returnType;
+  }
   return root;
 }
 
