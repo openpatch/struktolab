@@ -77,6 +77,7 @@ import {
   addCase,
   removeCase,
   collectMovedIds,
+  carryOverColumnWidths,
 } from "../common/tree-ops.js";
 
 /* ── Constants ─────────────────────────────────────────────── */
@@ -3618,6 +3619,8 @@ class StruktolabEditor extends HTMLElement {
         return;
       }
       const newTree = this._prepTree(this._codeToTree(code));
+      // Pseudocode writes column widths down; real code has no place for them.
+      if (this.codeMode !== "pseudocode") carryOverColumnWidths(this._tree, newTree);
       this._pushHistory();
       this._tree = newTree;
       this._clearCodeError();

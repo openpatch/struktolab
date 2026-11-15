@@ -537,3 +537,79 @@ export function collectEditableNodes(tree) {
   walk(tree);
   return nodes;
 }
+
+/** Branch and case nodes, in the order they appear in the code. */
+function _columnNodes(tree) {
+  const out = [];
+  function walk(node) {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "BranchNode" || node.type === "CaseNode") {
+      const cols =
+        node.type === "BranchNode"
+          ? 2
+          : (node.cases ? node.cases.length : 0) + (node.defaultOn ? 1 : 0);
+      out.push({ node, key: node.type + ":" + cols, text: (node.text || "").trim() });
+    }
+    for (const key of ["child", "trueChild", "falseChild", "tryChild", "catchChild"]) {
+      walk(node[key]);
+    }
+    if (node.cases) node.cases.forEach(walk);
+    walk(node.defaultNode);
+    walk(node.followElement);
+  }
+  walk(tree);
+  return out;
+}
+
+/**
+ * Give the branches and cases of a freshly parsed tree the column widths the
+ * same blocks had before. Java, Python and JavaScript have no place for widths,
+ * so without this every edit to the code would undo the student's resizing.
+ *
+ * Blocks with the same kind, column count and text are matched first, in
+ * order; a block whose text was edited keeps its widths if it sits between
+ * the same matched neighbours. Mutates and returns `newTree`.
+ */
+export function carryOverColumnWidths(oldTree, newTree) {
+  const olds = _columnNodes(oldTree);
+  const news = _columnNodes(newTree);
+  const matchOf = new Array(news.length).fill(-1);
+  const used = new Array(olds.length).fill(false);
+
+  // Exact matches, in order.
+  let from = 0;
+  news.forEach((n, i) => {
+    for (let j = from; j < olds.length; j++) {
+      if (olds[j].key === n.key && olds[j].text === n.text) {
+        matchOf[i] = j;
+        used[j] = true;
+        from = j + 1;
+        return;
+      }
+    }
+  });
+
+  // Edited text: same kind and columns, between the same anchors.
+  news.forEach((n, i) => {
+    if (matchOf[i] !== -1) return;
+    let lo = -1;
+    for (let k = i - 1; k >= 0; k--) if (matchOf[k] !== -1) { lo = matchOf[k]; break; }
+    let hi = olds.length;
+    for (let k = i + 1; k < news.length; k++) if (matchOf[k] !== -1) { hi = matchOf[k]; break; }
+    for (let j = lo + 1; j < hi; j++) {
+      if (!used[j] && olds[j].key === n.key) {
+        matchOf[i] = j;
+        used[j] = true;
+        return;
+      }
+    }
+  });
+
+  news.forEach((n, i) => {
+    const old = matchOf[i] === -1 ? null : olds[matchOf[i]].node;
+    if (old?.columnWidths && !n.node.columnWidths) {
+      n.node.columnWidths = [...old.columnWidths];
+    }
+  });
+  return newTree;
+}
