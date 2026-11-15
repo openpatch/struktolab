@@ -1,5 +1,32 @@
 # struktolab
 
+## 0.8.0
+
+### Minor Changes
+
+- 40b6f30: Write Java, Python or JavaScript and get the structogram.
+
+  - The code area under the diagram can be written in Pseudocode, Java, Python or JavaScript, or hidden ("No code"). Pick the language under View → Code or with the `code-mode` attribute. Code and diagram stay in sync both ways: typing builds the diagram, editing the diagram rewrites the code. The choice is saved in documents and shared links.
+  - The code area is a CodeMirror editor with line numbers, syntax highlighting, auto-indent and bracket matching. A syntax error — a missing `;` or `:`, an unclosed bracket or string, wrong indentation — is shown in German or English with its line, the line is marked, and the last good diagram stays. CodeMirror is bundled into the editor build, so embedding still needs no extra dependencies.
+  - Java: a whole class, loose methods or statements. A program that is only `main` shows main's body; imports, annotations and `Scanner` setup are left out. `IO.println`/`IO.print` (java.lang.IO, Java 25) and `System.out.println` → output; `x = IO.readln(…)`, `x = Integer.parseInt(IO.readln(…))` and the older `x = sc.nextInt()` (also `nextLine`, `readLine`, `JOptionPane.showInputDialog`) → input. A compact source file with just `void main() { … }` works too.
+  - Generated Java uses java.lang.IO: `x = IO.readln();` and `IO.println(…)` instead of `System.console().readLine()` and `System.out.println(…)`.
+  - JavaScript: semicolons optional; `function` declarations and `const f = (…) => {…}` become function blocks, class methods too. `console.log`/`alert` → output, `x = prompt(…)` (also wrapped in `Number(…)`, `parseInt(…)`) → input. `for…of` → "x in list".
+  - Python: if/elif/else, while (and `while True: … if not c: break` as do-while), for, def, class, try/except/finally, match/case. `print(…)` → output, `x = int(input(…))` → input, `range(a, b)` → "i = a bis b - 1". `if __name__ == "__main__":` and a lone `main()` are unwrapped.
+  - Count loops: `for (int i = 0; i < n; i++)` → "i = 0 bis n - 1"; for-each loops → "x in list", which the Java and JavaScript generators now write as for-each loops again.
+  - New API: `code-mode` attribute, `editor.codeMode`, `editor.loadCode(code, lang)`, `<script type="text/plain" data-code="java|python|javascript">` content; `parseJava`, `parseJavaScript`, `parsePython` and `CodeParseError` in `struktolab/core`.
+  - The web app no longer shows a separate code panel; pick the language in the editor instead.
+  - One language at a time: a structogram is written in Pseudocode, Java, Python or JavaScript, and its blocks keep that language's text. Nothing is translated. Switching an empty structogram to another language just happens; with blocks in it, the editor says the other language starts a new, empty structogram and asks first. "No code" only hides the code.
+  - Functions have an optional return type. The header is kept as written and edited as one line in its language's order: `int max(int a, int b)` in Java, `max(a: int, b: int) -> int` in Python and pseudocode (`funktion max(a, b) -> int:`), `max(a, b)` in JavaScript. Editing the header in the diagram now changes the parameters too. `renderStructogramSVG` takes a `functionStyle` option ("arrow" or "java").
+  - The "+" places are no longer shown at all times: only an empty diagram keeps one. Empty branches, cases and loop bodies stay quiet until a block is being placed or moved, and the strip under the diagram is gone; each block's "+" and the palette do the adding.
+  - The student's code is kept. Editing the diagram rewrites only the algorithm part and puts it back where it was: imports, the class, `main`'s header, the `Scanner` line, `if __name__ == "__main__":` and comments around it stay. Input and output lines that were not changed keep their exact text (`int n = sc.nextInt();`), Java methods keep their modifiers (`static`), and functions are followed by a blank line. Changing font size, scale or colours, or hiding the code, no longer touches it.
+  - Documents and shared links save the code as written (`code: { lang, text }`) and restore it on load, comments and all.
+  - `<struktolab-renderer>` reads Java, Python and JavaScript too: `<script type="text/plain" data-code="java|python|javascript">`, the `code-mode` attribute (function headers in that language's order), `loadCode(code, lang)`, and `src` pointing to a saved `.struktolab` document. Code with a syntax error shows the error and its line instead of the diagram.
+  - `<struktolab-editor>` gets `toDocument()` and `fromDocument(doc)` to save and restore a student's work with settings and code; `src` loads saved `.struktolab` documents with their settings.
+  - Inline code drops the page's surrounding blank lines and shared indentation.
+  - Both components wait for the page to be parsed before reading inline code; on a long page they could start before their `<script>` children existed and come up empty.
+  - Dragging a block is calmer and more precise. The diagram no longer jumps open when a drag starts; one line shows where the block will land — the upper half of a block means before it, the lower half after it, an empty branch lights up whole. Where nested blocks end on the same line (a branch that is the last block of a loop or of another branch), moving the pointer towards the line steps outwards and the line grows with it; below a branch block is "after the whole branch". The coloured bar of a loop, function or try is part of its body. A block being moved is faded where it is, the dragged block looks like a block, and Escape cancels. Tapping a block and then a place still opens every place as before.
+  - Click areas, the buttons on a block, the column resize handles and the faded block while moving now cover a block as it is drawn. Nested branches and loops are stretched to fill their column; the lower part of such a stretched block could not be clicked before. The renderer reports each node's drawn box (`nodeLayout` option of `renderStructogramSVG`).
+
 ## 0.7.0
 
 ### Minor Changes
