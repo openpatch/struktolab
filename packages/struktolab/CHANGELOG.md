@@ -1,5 +1,11 @@
 # struktolab
 
+## 0.8.1
+
+### Patch Changes
+
+- e451129: Resized branch and case columns stay resized when the diagram is rebuilt from Java, Python or JavaScript code. Those languages have nowhere to write widths down, so before, every edit to the code reset them.
+
 ## 0.8.0
 
 ### Minor Changes
