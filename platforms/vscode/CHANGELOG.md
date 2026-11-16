@@ -1,5 +1,13 @@
 # struktolab-studio
 
+## 0.5.7
+
+### Patch Changes
+
+- Updated dependencies [83026b8]
+- Updated dependencies [9e6096e]
+  - struktolab@0.9.0
+
 ## 0.5.6
 
 ### Patch Changes
