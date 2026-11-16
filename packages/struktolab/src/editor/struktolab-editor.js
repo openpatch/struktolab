@@ -332,6 +332,12 @@ const STYLES = `
   font-family: sans-serif;
   /* The insert menu hangs off the host, not off the clipped editor area. */
   position: relative;
+  /* The editor is drawn light: its own text and background, whatever the
+   * page around it uses (a dark page would otherwise give it light text on
+   * its white boxes, and show through between them). */
+  color-scheme: light;
+  color: #242428;
+  background: #fff;
   --toolbar-bg: #f5f5f5;
   --toolbar-border: #d6d6d6;
   --btn-bg: #fff;
@@ -425,11 +431,13 @@ label {
 }
 input[type="number"] { width: 60px; }
 
-/* View settings live behind one button instead of spending four slots. */
+/* View settings live behind one button instead of spending four slots. The
+   button sits at the start of the toolbar, so the popover opens towards the
+   end: anchored on the right, it hung out of the editor's left edge. */
 .popover {
   position: absolute;
   top: calc(100% + 4px);
-  right: 0;
+  left: 0;
   z-index: 20;
   display: grid;
   grid-template-columns: auto auto;
