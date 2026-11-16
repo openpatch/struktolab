@@ -1,5 +1,11 @@
 # web
 
+## 0.5.8
+
+### Patch Changes
+
+- eff0f64: The documentation lists all of the editor's attributes — `scale`, `color-mode`, `code-mode`, `hide-code` and `embedded` were missing — with an example of a Java structogram whose code is hidden, the code properties (`codeLanguage`, `codeHidden`) and what a shared link's settings hold.
+
 ## 0.5.7
 
 ### Patch Changes
