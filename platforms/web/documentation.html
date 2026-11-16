@@ -352,7 +352,16 @@ result = 1
 <span class="tag">&lt;/struktolab-editor&gt;</span>
 
 <span class="comment">&lt;!-- From external JSON file --&gt;</span>
-<span class="tag">&lt;struktolab-editor</span> <span class="attr">src</span>=<span class="string">"my-diagram.json"</span><span class="tag">&gt;&lt;/struktolab-editor&gt;</span></code></pre>
+<span class="tag">&lt;struktolab-editor</span> <span class="attr">src</span>=<span class="string">"my-diagram.json"</span><span class="tag">&gt;&lt;/struktolab-editor&gt;</span>
+
+<span class="comment">&lt;!-- Written in Java: the diagram alone, the code hidden --&gt;</span>
+<span class="tag">&lt;struktolab-editor</span> <span class="attr">hide-code</span><span class="tag">&gt;</span>
+  <span class="tag">&lt;script</span> <span class="attr">type</span>=<span class="string">"text/plain"</span> <span class="attr">data-code</span>=<span class="string">"java"</span><span class="tag">&gt;</span>
+    int twice(int x) {
+        return x * 2;
+    }
+  <span class="tag">&lt;/script&gt;</span>
+<span class="tag">&lt;/struktolab-editor&gt;</span></code></pre>
 
     <h4>Attributes</h4>
     <table>
@@ -360,7 +369,12 @@ result = 1
       <tr><td><code>width</code></td><td>Fixed width in pixels (auto-sizes if omitted)</td><td>auto</td></tr>
       <tr><td><code>font-size</code></td><td>Font size in pixels</td><td><code>14</code></td></tr>
       <tr><td><code>lang</code></td><td>Pseudocode language: <code>de</code> or <code>en</code></td><td><code>de</code></td></tr>
-      <tr><td><code>src</code></td><td>URL to a JSON tree file</td><td>—</td></tr>
+      <tr><td><code>src</code></td><td>URL to a JSON tree file or a saved <code>.struktolab</code> document</td><td>—</td></tr>
+      <tr><td><code>scale</code></td><td>Scale factor for the diagram, e.g. <code>0.5</code></td><td><code>1</code></td></tr>
+      <tr><td><code>color-mode</code></td><td><code>color</code>, <code>greyscale</code> or <code>bw</code></td><td><code>color</code></td></tr>
+      <tr><td><code>code-mode</code></td><td>The language the structogram is written in: <code>pseudocode</code>, <code>java</code>, <code>python</code> or <code>javascript</code>. Code and diagram stay in sync both ways. Also in View. (<code>none</code> hides the code, the older way of saying <code>hide-code</code>.)</td><td><code>pseudocode</code>, or the language of inline <code>data-code</code></td></tr>
+      <tr><td><code>hide-code</code></td><td>The diagram alone, without the code under it. The language stays: Java's function headers read like Java, and the code comes back in that language. Also in View (“Show code”).</td><td>off</td></tr>
+      <tr><td><code>embedded</code></td><td>The host keeps the file: no Save/Load buttons, and PNG/SVG raise an <code>export-image</code> event instead of downloading</td><td>off</td></tr>
     </table>
 
     <h4>JavaScript API</h4>
@@ -372,6 +386,12 @@ console.log(editor.tree);
 
 <span class="comment">// Set from pseudocode string</span>
 editor.pseudocode = <span class="string">'input("name")\noutput("Hello " + name)'</span>;
+
+<span class="comment">// Code → structogram, and the language it is written in</span>
+editor.loadCode(<span class="string">'for i in range(10):\n    print(i)'</span>, <span class="string">'python'</span>);
+editor.codeMode = <span class="string">'java'</span>;  <span class="comment">// the language: 'pseudocode', 'java', 'python', 'javascript'</span>
+editor.codeLanguage;          <span class="comment">// → 'java', also while the code is hidden</span>
+editor.codeHidden = <span class="keyword">true</span>;    <span class="comment">// the diagram alone (the hide-code attribute)</span>
 
 <span class="comment">// Code generation</span>
 editor.toCode(<span class="string">'python'</span>);     <span class="comment">// → Python code</span>
@@ -396,7 +416,7 @@ editor.addEventListener(<span class="string">'change'</span>, (e) => {
 
     <h3><code>&lt;struktolab-renderer&gt;</code></h3>
 
-    <p>A read-only SVG renderer for displaying structograms. Same attributes and tree format as the editor, but without editing capabilities.</p>
+    <p>A read-only SVG renderer for displaying structograms. Same attributes and tree format as the editor, but without editing capabilities and without a code area: <code>code-mode</code> only decides how function headers read (taken from inline <code>data-code</code> when not set).</p>
 
 <pre><code><span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="string">"struktolab-renderer.js"</span><span class="tag">&gt;&lt;/script&gt;</span>
 
@@ -474,8 +494,12 @@ renderer.toCode(<span class="string">'python'</span>);</code></pre>
   <span class="string">"origin"</span>: <span class="string">"https://example.com"</span>,
   <span class="string">"version"</span>: 2,
   <span class="string">"model"</span>: { <span class="comment">/* tree JSON */</span> },
-  <span class="string">"settings"</span>: { <span class="string">"lang"</span>: <span class="string">"de"</span>, <span class="string">"fontSize"</span>: <span class="string">"14"</span> }
+  <span class="string">"settings"</span>: { <span class="string">"lang"</span>: <span class="string">"de"</span>, <span class="string">"fontSize"</span>: <span class="string">"14"</span>, <span class="string">"colorMode"</span>: <span class="string">"color"</span>, <span class="string">"scale"</span>: <span class="string">"1"</span>,
+                <span class="string">"codeMode"</span>: <span class="string">"java"</span>, <span class="string">"hideCode"</span>: <span class="keyword">true</span> },
+  <span class="string">"code"</span>: { <span class="string">"lang"</span>: <span class="string">"java"</span>, <span class="string">"text"</span>: <span class="string">"…"</span> }  <span class="comment">// the student's own code, as written</span>
 }</code></pre>
+
+    <p><code>codeMode</code> is the language the structogram is written in, <code>hideCode</code> (only when <code>true</code>) that its code was hidden. Older links with <code>"codeMode": "none"</code> still open with the code hidden.</p>
 
     <footer>
       Built with ❤️ by <a href="https://openpatch.org" target="_blank">OpenPatch</a>
