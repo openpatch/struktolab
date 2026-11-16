@@ -83,6 +83,7 @@ Full-featured visual editor with toolbar, pseudocode sync, and import/export.
 | `code-mode` | The language the structogram is written in — `pseudocode`, `java`, `python`, `javascript`. Code and diagram stay in sync both ways. Also in the View settings. (`none` hides the code, the older way of saying `hide-code`.) | `pseudocode`, or the language of inline `data-code` |
 | `hide-code` | The diagram alone, without the code under it; the language stays (Java-style function headers, the language a shown code area comes back in). Also in the View settings ("Show code"). | off |
 | `embedded`  | The host owns the file: hides Save/Load, and PNG/SVG raise `export-image` instead of downloading | off |
+| `resettable` | A Reset button beside Undo/Redo: after asking, it goes back to the structogram the element started with and fires `reset` | off |
 
 #### JavaScript API
 
@@ -248,6 +249,17 @@ the student typed:
 ```js
 editor.addEventListener("change", () => store.put(editor.toDocument()));
 editor.fromDocument(await store.get());   // also accepts a bare tree
+```
+
+With `resettable`, students get a **Reset** button that brings back the
+structogram the page started with — the inline code, pseudocode or JSON, else
+`src`, else an empty one — after asking. `editor.reset()` does the same
+without asking. Either way the editor fires `reset` (and `change` with the
+restored tree), so the host can drop what it saved:
+
+```js
+editor.setAttribute("resettable", "");
+editor.addEventListener("reset", () => store.delete());
 ```
 
 ## Shareable URLs

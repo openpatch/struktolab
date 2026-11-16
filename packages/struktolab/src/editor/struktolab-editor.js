@@ -121,6 +121,9 @@ const UI_STRINGS = {
     undoTitle: "Rückgängig (Strg+Z)",
     redo: "Wiederholen",
     redoTitle: "Wiederholen (Strg+Umschalt+Z)",
+    reset: "Zurücksetzen",
+    resetTitle: "Zurück zum ursprünglichen Struktogramm",
+    resetConfirm: "Das Struktogramm auf das Original zurücksetzen? Deine Änderungen gehen verloren.",
     view: "Ansicht",
     viewTitle: "Sprache, Größe, Skalierung und Farben",
     save: "Speichern",
@@ -203,6 +206,9 @@ const UI_STRINGS = {
     undoTitle: "Undo (Ctrl+Z)",
     redo: "Redo",
     redoTitle: "Redo (Ctrl+Shift+Z)",
+    reset: "Reset",
+    resetTitle: "Back to the original structogram",
+    resetConfirm: "Reset this structogram to the original? Your changes will be lost.",
     view: "View",
     viewTitle: "Language, size, scale and colours",
     save: "Save",
@@ -301,6 +307,7 @@ const TOOLBAR_ITEMS = [
 const ICON_PATHS = {
   undo: "M9 15 4 10l5-5M4 10h11a5 5 0 0 1 0 10h-3",
   redo: "M15 15l5-5-5-5M20 10H9a5 5 0 0 0 0 10h3",
+  reset: "M3 4v6h6M5.51 15a9 9 0 1 0 2.13-9.36L3 10",
   view: "M4 6h9M17 6h3M15 4v4M4 12h3M11 12h9M9 10v4M4 18h11M19 18h1M17 16v4",
   save: "M5 3h11l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM7 3v5h8V3M7 21v-7h10v7",
   load: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
@@ -648,6 +655,8 @@ input[type="number"] { width: 60px; }
  *              stays. Also in View ("Show code").
  *   embedded — the host owns the file. Hides the Save/Load buttons and turns the
  *              PNG/SVG buttons into an "export-image" event instead of a download.
+ *   resettable — a Reset button beside Undo/Redo: after asking, it goes back to
+ *              the structogram the element started with (see reset()).
  *
  * Properties:
  *   tree, pseudocode, keywords (same as <struktolab-renderer>)
@@ -661,14 +670,17 @@ input[type="number"] { width: 60px; }
  *   loadJSON(json)       — load from JSON string or object
  *   exportImage(format)  — export as PNG or SVG Blob (async)
  *   change(tree)         — set a new tree programmatically
+ *   reset()              — back to the structogram the element started with: its
+ *                          code/pseudocode/JSON <script>, else `src`, else empty
  *
  * Events:
  *   "change"       — fired when the tree changes (detail: { tree })
  *   "export-image" — embedded only: an image is ready (detail: { format, blob })
+ *   "reset"        — reset() ran; a host that saves the student's work drops it
  */
 class StruktolabEditor extends HTMLElement {
   static get observedAttributes() {
-    return ["scale", "font-size", "src", "lang", "color-mode", "embedded", "code-mode", "hide-code"];
+    return ["scale", "font-size", "src", "lang", "color-mode", "embedded", "code-mode", "hide-code", "resettable"];
   }
 
   constructor() {
@@ -902,7 +914,7 @@ class StruktolabEditor extends HTMLElement {
   attributeChangedCallback(name, oldVal, newVal) {
     if (name === "src" && newVal && newVal !== oldVal) {
       this._fetchTree(newVal);
-    } else if (name === "embedded") {
+    } else if (name === "embedded" || name === "resettable") {
       this._applyEmbedded();
     } else if (name === "code-mode" || name === "hide-code") {
       if (name === "code-mode" && CODE_MODES.includes(newVal) && newVal !== "none") this._codeLanguage = newVal;
@@ -1156,7 +1168,10 @@ class StruktolabEditor extends HTMLElement {
     const history = this._group("history");
     this._undoBtn = this._button(icon("undo"), this._t("undo"), this._t("undoTitle"), () => this.undo());
     this._redoBtn = this._button(icon("redo"), this._t("redo"), this._t("redoTitle"), () => this.redo());
-    history.append(this._undoBtn, this._redoBtn);
+    this._resetBtn = this._button(icon("reset"), this._t("reset"), this._t("resetTitle"), () => {
+      if (window.confirm(this._t("resetConfirm"))) this.reset();
+    });
+    history.append(this._undoBtn, this._redoBtn, this._resetBtn);
     this._historyGroup = history;
     this._historySep = this._separator();
 
@@ -1408,6 +1423,7 @@ class StruktolabEditor extends HTMLElement {
     this._loadBtn.style.display = hidden;
     this._historyGroup.style.display = hidden;
     this._historySep.style.display = hidden;
+    this._resetBtn.style.display = this.hasAttribute("resettable") ? "" : "none";
   }
 
   /** True when the host, not this component, owns files and undo. */
@@ -3741,6 +3757,30 @@ class StruktolabEditor extends HTMLElement {
     this._render();
     this._syncTreeToPseudocode();
     this._emitChange();
+  }
+
+  /**
+   * Back to the structogram the element started with — its code, pseudocode
+   * or JSON <script>, else its `src`, else an empty one — and the code that
+   * goes with it. The undo history goes too: the original is a fresh start.
+   * Fires "reset", so a host that keeps the student's work can drop it, and
+   * "change" with the restored tree.
+   */
+  reset() {
+    this._tree = null;
+    this._codeFrame = null;
+    this._codeTextLanguage = null;
+    this._codeNeedsSync = false;
+    this._resetHistory();
+    // _initialize() announces a tree it reads from a <script>, but not an
+    // empty one; one from `src` arrives later, through fromDocument().
+    let announced = false;
+    const onChange = () => (announced = true);
+    this.addEventListener("change", onChange);
+    this._initialize();
+    this.removeEventListener("change", onChange);
+    if (this._tree && !announced) this._emitChange();
+    this.dispatchEvent(new CustomEvent("reset", { bubbles: true }));
   }
 
   _resetHistory() {
