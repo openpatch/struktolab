@@ -6,8 +6,13 @@
  * scale. That envelope is what a `.struktolab` file contains, and what the web
  * app packs into the URL hash.
  *
- *   { version: 2, model: <tree | null>, settings: { lang, fontSize, colorMode, scale, codeMode },
+ *   { version: 2, model: <tree | null>,
+ *     settings: { lang, fontSize, colorMode, scale, codeMode, hideCode? },
  *     code?: { lang, text } }
+ *
+ * `codeMode` is the language the structogram is written in; `hideCode` that
+ * the code under the diagram was hidden. (Before `hideCode`, a hidden code
+ * area was saved as `codeMode: "none"`, which still loads.)
  *
  * `code` is the student's own code when the structogram was written in Java,
  * Python or JavaScript, so it comes back as they wrote it — class, comments
@@ -35,7 +40,8 @@ export function serializeDocument(editor) {
       fontSize: editor.getAttribute("font-size") || DEFAULT_SETTINGS.fontSize,
       colorMode: editor.getAttribute("color-mode") || DEFAULT_SETTINGS.colorMode,
       scale: editor.getAttribute("scale") || DEFAULT_SETTINGS.scale,
-      codeMode: editor.getAttribute("code-mode") || DEFAULT_SETTINGS.codeMode,
+      codeMode: editor.codeLanguage ?? (editor.getAttribute("code-mode") || DEFAULT_SETTINGS.codeMode),
+      ...(editor.codeHidden ? { hideCode: true } : {}),
     },
     ...(code ? { code } : {}),
   };
@@ -64,6 +70,8 @@ export function applyDocument(editor, doc) {
     // The editor falls back to pseudocode for a mode it does not know.
     editor.setAttribute("code-mode", settings.codeMode);
   }
+  if (settings.hideCode) editor.setAttribute("hide-code", "");
+  else if (settings.codeMode && settings.codeMode !== "none") editor.removeAttribute("hide-code");
 
   // An empty structogram serializes to `null` — there is nothing to load, and
   // the editor's own empty root is exactly the right thing to leave in place.

@@ -142,6 +142,7 @@ const UI_STRINGS = {
     pythonPlaceholder: "Python-Code, z. B.\n\nn = int(input(\"Zahl n: \"))\nfor i in range(n):\n    print(i)",
     javascriptPlaceholder: "JavaScript-Code, z. B.\n\nconst n = Number(prompt(\"Zahl n\"))\nfor (let i = 0; i < n; i++) {\n    console.log(i)\n}",
     codeMode: "Code",
+    showCode: "Code zeigen",
     codeModes: {
       none: "Kein Code",
       pseudocode: "Pseudocode",
@@ -223,6 +224,7 @@ const UI_STRINGS = {
     pythonPlaceholder: "Python code, e.g.\n\nn = int(input(\"Number n: \"))\nfor i in range(n):\n    print(i)",
     javascriptPlaceholder: "JavaScript code, e.g.\n\nconst n = Number(prompt(\"Number n\"))\nfor (let i = 0; i < n; i++) {\n    console.log(i)\n}",
     codeMode: "Code",
+    showCode: "Show code",
     codeModes: {
       none: "No code",
       pseudocode: "Pseudocode",
@@ -639,8 +641,11 @@ input[type="number"] { width: 60px; }
  *
  * Attributes:
  *   scale, font-size, src, lang, color-mode (same as <struktolab-renderer>)
- *   code-mode — the code area's language: "pseudocode" (default), "java",
- *              "python", "javascript", or "none" to hide it. Also in View.
+ *   code-mode — the language the structogram is written in: "pseudocode"
+ *              (default), "java", "python" or "javascript". Also in View.
+ *              "none" hides the code (the older way of saying hide-code).
+ *   hide-code — the diagram alone, without the code under it; the language
+ *              stays. Also in View ("Show code").
  *   embedded — the host owns the file. Hides the Save/Load buttons and turns the
  *              PNG/SVG buttons into an "export-image" event instead of a download.
  *
@@ -663,7 +668,7 @@ input[type="number"] { width: 60px; }
  */
 class StruktolabEditor extends HTMLElement {
   static get observedAttributes() {
-    return ["scale", "font-size", "src", "lang", "color-mode", "embedded", "code-mode"];
+    return ["scale", "font-size", "src", "lang", "color-mode", "embedded", "code-mode", "hide-code"];
   }
 
   constructor() {
@@ -839,7 +844,9 @@ class StruktolabEditor extends HTMLElement {
         try {
           const code = inlineSource(codeScript.textContent);
           this._tree = this._prepTree(this._readCode(code, mode));
+          // The code's language, also behind code-mode="none".
           if (!this.hasAttribute("code-mode")) this.setAttribute("code-mode", mode);
+          else if (this.getAttribute("code-mode") === "none") this._codeLanguage = mode;
           // Shown as written — not as the generator would write it.
           this._setCode(code);
           this._codeTextLanguage = mode;
@@ -897,8 +904,8 @@ class StruktolabEditor extends HTMLElement {
       this._fetchTree(newVal);
     } else if (name === "embedded") {
       this._applyEmbedded();
-    } else if (name === "code-mode") {
-      if (CODE_MODES.includes(newVal) && newVal !== "none") this._codeLanguage = newVal;
+    } else if (name === "code-mode" || name === "hide-code") {
+      if (name === "code-mode" && CODE_MODES.includes(newVal) && newVal !== "none") this._codeLanguage = newVal;
       this._applyCodeMode();
       if (this._tree) {
         // Hiding the code changes nothing in it; back from "No code" to the
@@ -1032,10 +1039,12 @@ class StruktolabEditor extends HTMLElement {
   }
 
   /**
-   * What the code area below the diagram shows: "none", or the language it is
+   * What the code area below the diagram shows: "none" when the code is
+   * hidden (hide-code, or code-mode="none"), otherwise the language it is
    * written in — "pseudocode", "java", "python", "javascript".
    */
   get codeMode() {
+    if (this.hasAttribute("hide-code")) return "none";
     const mode = this.getAttribute("code-mode");
     return CODE_MODES.includes(mode) ? mode : "pseudocode";
   }
@@ -1043,9 +1052,33 @@ class StruktolabEditor extends HTMLElement {
     this.setAttribute("code-mode", CODE_MODES.includes(mode) ? mode : "pseudocode");
   }
 
+  /**
+   * The language the structogram is written in, shown or not:
+   * "pseudocode", "java", "python" or "javascript".
+   */
+  get codeLanguage() {
+    const mode = this.getAttribute("code-mode");
+    if (CODE_MODES.includes(mode) && mode !== "none") return mode;
+    return this._codeLanguage || "pseudocode";
+  }
+
+  /** Whether the code under the diagram is hidden. */
+  get codeHidden() {
+    return this.codeMode === "none";
+  }
+  set codeHidden(hidden) {
+    if (hidden) {
+      this.setAttribute("hide-code", "");
+      return;
+    }
+    // Shown again: in its language, also when it was hidden the older way.
+    if (this.getAttribute("code-mode") === "none") this.setAttribute("code-mode", this.codeLanguage);
+    this.removeAttribute("hide-code");
+  }
+
   /** Function headers read like the code beside them: Java puts the type in front. */
   _functionStyle() {
-    return this.codeMode === "java" ? "java" : "arrow";
+    return this.codeLanguage === "java" ? "java" : "arrow";
   }
 
   _parseCode(code, mode) {
@@ -1273,7 +1306,8 @@ class StruktolabEditor extends HTMLElement {
       this.setAttribute("lang", langSelect.value);
       this._keywords = null;
       // Pseudocode is written in the UI language's keywords; real code is not.
-      if (this.codeMode === "pseudocode") this._onTreeChange();
+      // Hidden pseudocode is brought up to date when it is shown again.
+      if (this.codeLanguage === "pseudocode") this._onTreeChange();
       else this._onViewChange();
     });
     row(this._t("language"), langSelect);
@@ -1325,15 +1359,26 @@ class StruktolabEditor extends HTMLElement {
     const codeModeSelect = document.createElement("select");
     const names = this._t("codeModes");
     for (const mode of CODE_MODES) {
+      if (mode === "none") continue; // that is "Show code" below
       const option = document.createElement("option");
       option.value = mode;
       option.textContent = names[mode];
       codeModeSelect.appendChild(option);
     }
-    codeModeSelect.value = this.codeMode;
+    codeModeSelect.value = this.codeLanguage;
     codeModeSelect.addEventListener("change", () => this._switchCodeMode(codeModeSelect.value));
     row(this._t("codeMode"), codeModeSelect);
     this._codeModeSelect = codeModeSelect;
+
+    const showCode = document.createElement("input");
+    showCode.type = "checkbox";
+    showCode.checked = !this.codeHidden;
+    showCode.addEventListener("change", () => {
+      this.codeHidden = !showCode.checked;
+      this._emitChange(); // whether it shows is part of the saved document
+    });
+    row(this._t("showCode"), showCode);
+    this._showCodeInput = showCode;
 
     return pop;
   }
@@ -3402,7 +3447,8 @@ class StruktolabEditor extends HTMLElement {
     if (!this._codeView) return;
     const mode = this.codeMode;
     for (const m of CODE_MODES) this._pseudoArea.classList.toggle(m, mode === m);
-    if (this._codeModeSelect) this._codeModeSelect.value = mode;
+    if (this._codeModeSelect) this._codeModeSelect.value = this.codeLanguage;
+    if (this._showCodeInput) this._showCodeInput.checked = mode !== "none";
     this._codeView.dispatch({
       effects: this._codeModeCompartment.reconfigure(this._codeModeExtensions(mode)),
     });
@@ -3495,16 +3541,30 @@ class StruktolabEditor extends HTMLElement {
    */
   _switchCodeMode(mode) {
     this._dismissLanguageNotice();
-    if (mode === this.codeMode) return;
+    // "none" is hiding the code, not a language.
+    if (mode === "none") {
+      this.codeHidden = true;
+      this._emitChange();
+      return;
+    }
+    if (mode === this.codeLanguage) return;
     // Whatever was typed but not yet read belongs to the mode it was typed in.
     if (this._debounceTimer) this._syncPseudocodeToTree();
     const from = this._codeLanguage;
-    if (mode !== "none" && from && from !== mode && !this._isEmpty()) {
+    if (from && from !== mode && !this._isEmpty()) {
       this._askLanguageSwitch(mode);
       return;
     }
+    this._setLanguage(mode);
+    this._emitChange(); // the language is part of the saved document
+  }
+
+  /** Another language; the code stays hidden or shown as it was. */
+  _setLanguage(mode) {
+    const hidden = this.codeHidden;
+    this._codeLanguage = mode;
     this.codeMode = mode;
-    this._emitChange(); // the mode is part of the saved document
+    if (hidden) this.setAttribute("hide-code", "");
   }
 
   _isEmpty() {
@@ -3541,8 +3601,7 @@ class StruktolabEditor extends HTMLElement {
       // A structogram in another language, not an edit of this one.
       this._resetHistory();
       this._codeFrame = null;
-      this._codeLanguage = mode;
-      this.codeMode = mode;
+      this._setLanguage(mode);
       this._render();
       this._syncTreeToPseudocode();
       this._emitChange();
@@ -3565,7 +3624,7 @@ class StruktolabEditor extends HTMLElement {
     this._languageNotice.remove();
     this._languageNotice = null;
     // The select shows what was picked; put it back to what is in force.
-    if (this._codeModeSelect) this._codeModeSelect.value = this.codeMode;
+    if (this._codeModeSelect) this._codeModeSelect.value = this.codeLanguage;
   }
 
   /** The tree as text in the current code mode. */

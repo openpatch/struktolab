@@ -80,7 +80,8 @@ Full-featured visual editor with toolbar, pseudocode sync, and import/export.
 | `lang`      | Pseudocode language (`de` or `en`) | `de`    |
 | `src`       | URL to a JSON tree file            | —       |
 | `color-mode` | Color mode (`color`, `bw`)       | `color` |
-| `code-mode` | The language of the code area under the diagram — `pseudocode`, `java`, `python`, `javascript` — or `none` to hide it. Code and diagram stay in sync both ways. Also in the View settings. | `pseudocode` |
+| `code-mode` | The language the structogram is written in — `pseudocode`, `java`, `python`, `javascript`. Code and diagram stay in sync both ways. Also in the View settings. (`none` hides the code, the older way of saying `hide-code`.) | `pseudocode`, or the language of inline `data-code` |
+| `hide-code` | The diagram alone, without the code under it; the language stays (Java-style function headers, the language a shown code area comes back in). Also in the View settings ("Show code"). | off |
 | `embedded`  | The host owns the file: hides Save/Load, and PNG/SVG raise `export-image` instead of downloading | off |
 
 #### JavaScript API
@@ -97,7 +98,9 @@ editor.pseudocode = 'eingabe("Zahl n")';
 
 // Code → structogram (throws a CodeParseError with .line on syntax errors)
 editor.loadCode('for i in range(10):\n    print(i)', 'python'); // 'java', 'python', 'javascript', 'pseudocode'
-editor.codeMode = 'java'; // what the code area shows: 'none', 'pseudocode', 'java', 'python', 'javascript'
+editor.codeMode = 'java'; // the language: 'pseudocode', 'java', 'python', 'javascript'
+editor.codeLanguage;      // → 'java', also while the code is hidden
+editor.codeHidden = true; // the diagram alone (the hide-code attribute)
 
 // Code generation
 editor.toCode('python');    // → Python code
@@ -178,7 +181,7 @@ a `.struktolab` file holds and the web app packs into a shareable URL.
 import { serializeDocument, applyDocument, emptyDocument } from 'struktolab/editor';
 
 const doc = serializeDocument(editor);
-// { version: 2, model: {...}, settings: { lang, fontSize, colorMode, scale, codeMode },
+// { version: 2, model: {...}, settings: { lang, fontSize, colorMode, scale, codeMode, hideCode? },
 //   code?: { lang, text } }   ← the student's own Java/Python/JavaScript, as written
 
 applyDocument(editor, doc);      // → true when a model was loaded
