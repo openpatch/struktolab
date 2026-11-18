@@ -341,6 +341,9 @@ const STYLES = `
   font-family: sans-serif;
   /* The insert menu hangs off the host, not off the clipped editor area. */
   position: relative;
+  /* The toolbar fits itself to the editor, not the window: in a page's
+   * column or a side panel the editor is narrow on a wide screen. */
+  container-type: inline-size;
   /* The editor is drawn light: its own text and background, whatever the
    * page around it uses (a dark page would otherwise give it light text on
    * its white boxes, and show through between them). */
@@ -471,8 +474,8 @@ input[type="number"] { width: 60px; }
 }
 .popover .notice .actions { display: flex; gap: 6px; margin-top: 6px; }
 
-/* Narrow viewports: the icons carry the meaning, the titles carry the words. */
-@media (max-width: 760px) {
+/* A narrow editor: the icons carry the meaning, the titles carry the words. */
+@container (max-width: 760px) {
   .toolbar button .label { display: none; }
   .toolbar button { padding: 4px 8px; }
 }
