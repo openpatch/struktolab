@@ -1,5 +1,12 @@
 # web
 
+## 0.5.11
+
+### Patch Changes
+
+- Updated dependencies [fa96f37]
+  - struktolab@0.10.2
+
 ## 0.5.10
 
 ### Patch Changes

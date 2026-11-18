@@ -1,5 +1,11 @@
 # struktolab
 
+## 0.10.2
+
+### Patch Changes
+
+- fa96f37: The editor and the renderer draw the structogram again when they get wider or narrower, so the text keeps its `font-size`. Before, the diagram was drawn once for the starting width and then stretched, so dragging a side panel smaller shrank the text with it.
+
 ## 0.10.1
 
 ### Patch Changes
