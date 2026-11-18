@@ -827,6 +827,38 @@ class StruktolabEditor extends HTMLElement {
   connectedCallback() {
     this._applyEmbedded();
     whenChildrenParsed(() => this._initialize());
+    this._observeWidth();
+  }
+
+  disconnectedCallback() {
+    this._widthObserver?.disconnect();
+    this._widthObserver = null;
+  }
+
+  /**
+   * The diagram is laid out for one width and then stretched to fill the
+   * editor, so when the editor gets narrower (a side panel dragged smaller)
+   * the text would shrink with it. Lay it out again for the new width
+   * instead, so `font-size` stays the size it says.
+   *
+   * Not while a text is being edited or a column dragged: both hold pixel
+   * positions in the drawn diagram. The render that ends them picks up the
+   * width.
+   */
+  _observeWidth() {
+    if (this._widthObserver || typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    this._widthObserver = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (!this._tree || this._renderedWidth == null) return;
+        if (this._resolveWidth() === this._renderedWidth) return;
+        if (this._overlay.style.display === "flex") return;
+        if (this._editorArea.classList.contains("resizing")) return;
+        this._render();
+      });
+    });
+    this._widthObserver.observe(this._editorArea);
   }
 
   _uiLang() {
@@ -1541,6 +1573,7 @@ class StruktolabEditor extends HTMLElement {
     this._hideTypeMenu();
     const fontSize = parseInt(this.getAttribute("font-size"), 10) || 14;
     const width = this._resolveWidth();
+    this._renderedWidth = width;
     const colorMode = this.getAttribute("color-mode");
 
     // Remove old SVG (keep overlay). If the keyboard was on a node, it has to

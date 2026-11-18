@@ -99,6 +99,30 @@ class StruktolabRenderer extends HTMLElement {
     } else {
       requestAnimationFrame(() => this._initialize());
     }
+    this._observeWidth();
+  }
+
+  disconnectedCallback() {
+    this._widthObserver?.disconnect();
+    this._widthObserver = null;
+  }
+
+  /**
+   * The diagram is laid out for one width and then stretched to fill the
+   * element; drawn again when the width changes, so the text keeps its
+   * `font-size` instead of shrinking with a narrower column or panel.
+   */
+  _observeWidth() {
+    if (this._widthObserver || typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    this._widthObserver = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (this._renderedWidth == null) return;
+        if (this._resolveWidth() !== this._renderedWidth) this._render();
+      });
+    });
+    this._widthObserver.observe(this);
   }
 
   _uiLang() {
@@ -293,6 +317,7 @@ class StruktolabRenderer extends HTMLElement {
     const fontSize = parseInt(this.getAttribute("font-size"), 10) || 14;
     const colorMode = this.getAttribute("color-mode") || "color";
     const width = this._resolveWidth();
+    this._renderedWidth = width;
 
     const svg = renderStructogramSVG(this._tree, {
       width,
